@@ -1,0 +1,32 @@
+# Copyright (c) 2026
+# SPDX-License-Identifier: Apache-2.0
+
+menu "Secure mass sample options"
+
+choice APP_SECURE_MASS_REENUM_STRATEGY
+	prompt "USB re-enumeration strategy"
+	default APP_SECURE_MASS_REENUM_SOFT_REBOOT
+	help
+	  Select how the sample switches between the locked HID-only and
+	  unlocked HID+MSC USB personas.
+
+config APP_SECURE_MASS_REENUM_SOFT_REBOOT
+	bool "Warm reboot into the target USB mode"
+	select REBOOT
+	help
+	  Store the target USB mode in retained RAM and warm reboot. This is
+	  the most reliable option on boards where usb_disable() does not
+	  create a host-visible disconnect.
+
+config APP_SECURE_MASS_REENUM_USB_DISABLE_ENABLE
+	bool "Switch modes with usb_disable()/usb_enable()"
+	help
+	  Reconfigure the legacy USB device stack in place by detaching,
+	  changing descriptors, and enabling USB again. This depends on the
+	  board and USB driver providing a host-visible disconnect.
+
+endchoice
+
+endmenu
+
+source "Kconfig.zephyr"

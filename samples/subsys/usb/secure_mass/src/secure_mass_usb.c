@@ -4,14 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/linker/section_tags.h>
 #include <zephyr/logging/log.h>
+
+#if defined(CONFIG_APP_SECURE_MASS_REENUM_SOFT_REBOOT)
+#include <zephyr/linker/section_tags.h>
 #include <zephyr/sys/reboot.h>
+#endif
 
 #include "secure_mass_priv.h"
 
 LOG_MODULE_DECLARE(secure_mass, LOG_LEVEL_INF);
 
+#if defined(CONFIG_APP_SECURE_MASS_REENUM_SOFT_REBOOT)
 struct secure_boot_mode_state {
 	uint32_t magic;
 	uint8_t next_mode;
@@ -19,6 +23,7 @@ struct secure_boot_mode_state {
 };
 
 static __noinit struct secure_boot_mode_state secure_boot_mode_state;
+#endif
 
 struct secure_mass_runtime secure_mass_runtime = {
 	.state = SECURE_STATE_LOCKED,
@@ -316,6 +321,7 @@ static void prepare_descriptors_once(void)
 	secure_mass_runtime.descriptors_ready = true;
 }
 
+#if defined(CONFIG_APP_SECURE_MASS_REENUM_SOFT_REBOOT)
 static enum secure_usb_mode secure_mass_load_boot_mode(void)
 {
 	enum secure_usb_mode mode = SECURE_USB_MODE_LOCKED;
@@ -336,6 +342,7 @@ static void secure_mass_store_boot_mode(enum secure_usb_mode mode)
 	secure_boot_mode_state.magic = SECURE_BOOT_MODE_MAGIC;
 	secure_boot_mode_state.next_mode = (uint8_t)mode;
 }
+#endif
 
 static const uint8_t *get_active_descriptor(enum secure_usb_mode mode)
 {
@@ -368,6 +375,17 @@ const struct secure_hid_descriptor *secure_mass_get_active_hid_descriptor(void)
 	return &unlocked_desc.hid.if0_hid;
 }
 
+static void secure_mass_set_runtime_mode(enum secure_usb_mode mode)
+{
+	secure_mass_runtime.usb_mode = mode;
+	secure_mass_runtime.pending_usb_mode = mode;
+	secure_mass_runtime.unlocked_configured_once = false;
+	secure_mass_runtime.state = (mode == SECURE_USB_MODE_LOCKED) ?
+		SECURE_STATE_LOCKED : SECURE_STATE_UNLOCKED;
+	secure_mass_runtime.usb_switch_in_progress = false;
+	secure_mass_indicator_update(secure_mass_runtime.state);
+}
+
 static void secure_usb_status_cb(enum usb_dc_status_code status,
 				 const uint8_t *param)
 {
@@ -397,7 +415,7 @@ static void secure_usb_status_cb(enum usb_dc_status_code status,
 	}
 }
 
-static int apply_usb_mode(enum secure_usb_mode mode)
+static int enable_usb_mode(enum secure_usb_mode mode)
 {
 	int ret;
 
@@ -415,13 +433,7 @@ static int apply_usb_mode(enum secure_usb_mode mode)
 		return ret;
 	}
 
-	secure_mass_runtime.usb_mode = mode;
-	secure_mass_runtime.pending_usb_mode = mode;
-	secure_mass_runtime.unlocked_configured_once = false;
-	secure_mass_runtime.state = (mode == SECURE_USB_MODE_LOCKED) ?
-		SECURE_STATE_LOCKED : SECURE_STATE_UNLOCKED;
-	secure_mass_runtime.usb_switch_in_progress = false;
-	secure_mass_indicator_update(secure_mass_runtime.state);
+	secure_mass_set_runtime_mode(mode);
 
 	LOG_INF("USB mode is now %s",
 		mode == SECURE_USB_MODE_LOCKED ? "locked (HID)" :
@@ -430,11 +442,30 @@ static int apply_usb_mode(enum secure_usb_mode mode)
 	return 0;
 }
 
+#if defined(CONFIG_APP_SECURE_MASS_REENUM_USB_DISABLE_ENABLE)
+static int reenumerate_usb_mode(enum secure_usb_mode mode)
+{
+	int ret;
+
+	ret = usb_disable();
+	if (ret != 0) {
+		LOG_WRN("usb_disable returned %d", ret);
+	}
+
+	k_sleep(K_MSEC(SECURE_REENUM_DETACH_MS));
+	usb_deconfig();
+
+	return enable_usb_mode(mode);
+}
+#endif
+
 static void usb_switch_work_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
 
 	secure_mass_runtime.usb_switch_in_progress = true;
+
+#if defined(CONFIG_APP_SECURE_MASS_REENUM_SOFT_REBOOT)
 	secure_mass_store_boot_mode(secure_mass_runtime.pending_usb_mode);
 
 	LOG_INF("Rebooting into %s mode",
@@ -442,6 +473,15 @@ static void usb_switch_work_handler(struct k_work *work)
 		"locked" : "unlocked");
 
 	sys_reboot(SYS_REBOOT_WARM);
+#else
+	if (reenumerate_usb_mode(secure_mass_runtime.pending_usb_mode) != 0) {
+		secure_mass_runtime.state =
+			(secure_mass_runtime.usb_mode == SECURE_USB_MODE_LOCKED) ?
+			SECURE_STATE_LOCKED : SECURE_STATE_UNLOCKED;
+		secure_mass_runtime.pending_usb_mode = secure_mass_runtime.usb_mode;
+		secure_mass_runtime.usb_switch_in_progress = false;
+	}
+#endif
 }
 
 void secure_mass_schedule_mode_switch(enum secure_usb_mode mode,
@@ -485,9 +525,14 @@ int secure_mass_usb_init(void)
 	k_work_init_delayable(&secure_mass_runtime.usb_switch_work,
 			      usb_switch_work_handler);
 	prepare_descriptors_once();
-	boot_mode = secure_mass_load_boot_mode();
 
-	ret = apply_usb_mode(boot_mode);
+#if defined(CONFIG_APP_SECURE_MASS_REENUM_SOFT_REBOOT)
+	boot_mode = secure_mass_load_boot_mode();
+#else
+	boot_mode = SECURE_USB_MODE_LOCKED;
+#endif
+
+	ret = enable_usb_mode(boot_mode);
 	if (ret != 0) {
 		LOG_ERR("Initial USB enable failed (%d)", ret);
 		return ret;
