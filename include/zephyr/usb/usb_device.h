@@ -199,6 +199,23 @@ struct usb_cfg_data {
 };
 
 /**
+ * @brief Prepare a USB descriptor table for use with the legacy USB stack
+ *
+ * This applies the legacy descriptor fixups in place: string descriptors are
+ * converted from ASCII7 to UTF16LE, configuration length and interface count
+ * are updated, interface runtime configuration callbacks are invoked, and
+ * endpoint descriptors are validated against registered class configuration
+ * data.
+ *
+ * Call this once before passing a custom descriptor table to usb_set_config().
+ *
+ * @param[in] usb_descriptor USB descriptor table
+ *
+ * @return 0 on success, negative errno code on fail
+ */
+int usb_fix_descriptor(const uint8_t *usb_descriptor);
+
+/**
  * @brief Configure USB controller
  *
  * Function to configure USB controller.

@@ -203,14 +203,14 @@ static struct secure_unlocked_descriptor_set unlocked_desc = {
 			.bInterval = SECURE_HID_INTERVAL_MS,
 		},
 	},
-	.msc = {
-		.if0 = {
-			.bLength = sizeof(struct usb_if_descriptor),
-			.bDescriptorType = USB_DESC_INTERFACE,
-			.bInterfaceNumber = 1,
-			.bAlternateSetting = 0,
-			.bNumEndpoints = 2,
-			.bInterfaceClass = USB_BCC_MASS_STORAGE,
+		.msc = {
+			.if0 = {
+				.bLength = sizeof(struct usb_if_descriptor),
+				.bDescriptorType = USB_DESC_INTERFACE,
+				.bInterfaceNumber = 0,
+				.bAlternateSetting = 0,
+				.bNumEndpoints = 2,
+				.bInterfaceClass = USB_BCC_MASS_STORAGE,
 			.bInterfaceSubClass = 0x06,
 			.bInterfaceProtocol = 0x50,
 			.iInterface = 0,
@@ -260,9 +260,31 @@ static struct secure_unlocked_descriptor_set unlocked_desc = {
 	},
 };
 
+static void secure_hid_interface_config(struct usb_desc_header *head,
+					uint8_t bInterfaceNumber)
+{
+	struct usb_if_descriptor *if_desc = (struct usb_if_descriptor *)head;
+	struct secure_hid_interface_desc *desc =
+		CONTAINER_OF(if_desc, struct secure_hid_interface_desc, if0);
+
+	desc->if0.bInterfaceNumber = bInterfaceNumber;
+	sys_put_le16(SECURE_HID_REPORT_DESC_SIZE,
+		     (uint8_t *)&desc->if0_hid.subdesc[0].wDescriptorLength);
+}
+
+static void secure_msc_interface_config(struct usb_desc_header *head,
+					uint8_t bInterfaceNumber)
+{
+	struct usb_if_descriptor *if_desc = (struct usb_if_descriptor *)head;
+	struct secure_msc_interface_desc *desc =
+		CONTAINER_OF(if_desc, struct secure_msc_interface_desc, if0);
+
+	desc->if0.bInterfaceNumber = bInterfaceNumber;
+}
+
 USBD_DEFINE_CFG_DATA(secure_hid_config) = {
 	.usb_device_description = NULL,
-	.interface_config = NULL,
+	.interface_config = secure_hid_interface_config,
 	.interface_descriptor = NULL,
 	.cb_usb_status = secure_hid_status_cb,
 	.interface = {
@@ -275,7 +297,7 @@ USBD_DEFINE_CFG_DATA(secure_hid_config) = {
 
 USBD_DEFINE_CFG_DATA(secure_msc_config) = {
 	.usb_device_description = NULL,
-	.interface_config = NULL,
+	.interface_config = secure_msc_interface_config,
 	.interface_descriptor = NULL,
 	.cb_usb_status = secure_msc_status_cb,
 	.interface = {
@@ -286,39 +308,39 @@ USBD_DEFINE_CFG_DATA(secure_msc_config) = {
 	.endpoint = secure_msc_ep_data,
 };
 
-static void ascii7_to_utf16le(void *descriptor)
+static void set_cfg_data_descriptors_for_mode(enum secure_usb_mode mode)
 {
-	struct usb_string_descriptor *str = descriptor;
-	int idx_max = str->bLength - 3;
-	int ascii_idx_max = str->bLength / 2 - 2;
-	uint8_t *buf = (uint8_t *)&str->bString;
-
-	for (int i = idx_max; i >= 0; i -= 2) {
-		buf[i] = 0U;
-		buf[i - 1] = buf[ascii_idx_max--];
+	if (mode == SECURE_USB_MODE_LOCKED) {
+		secure_hid_config.interface_descriptor = &locked_desc.hid.if0;
+		secure_msc_config.interface_descriptor = NULL;
+	} else {
+		secure_hid_config.interface_descriptor = &unlocked_desc.hid.if0;
+		secure_msc_config.interface_descriptor = &unlocked_desc.msc.if0;
 	}
 }
 
-static void prepare_string_descriptors(struct secure_usb_strings *strings)
+static int prepare_descriptors_once(void)
 {
-	ascii7_to_utf16le(&strings->mfr);
-	ascii7_to_utf16le(&strings->product);
-	ascii7_to_utf16le(&strings->sn);
-}
+	int ret;
 
-static void prepare_descriptors_once(void)
-{
 	if (secure_mass_runtime.descriptors_ready) {
-		return;
+		return 0;
 	}
 
-	prepare_string_descriptors(&locked_desc.strings);
-	prepare_string_descriptors(&unlocked_desc.strings);
-	locked_desc.hid.if0_hid.subdesc[0].wDescriptorLength =
-		sys_cpu_to_le16(SECURE_HID_REPORT_DESC_SIZE);
-	unlocked_desc.hid.if0_hid.subdesc[0].wDescriptorLength =
-		sys_cpu_to_le16(SECURE_HID_REPORT_DESC_SIZE);
+	set_cfg_data_descriptors_for_mode(SECURE_USB_MODE_LOCKED);
+	ret = usb_fix_descriptor((const uint8_t *)&locked_desc);
+	if (ret != 0) {
+		return ret;
+	}
+
+	set_cfg_data_descriptors_for_mode(SECURE_USB_MODE_UNLOCKED);
+	ret = usb_fix_descriptor((const uint8_t *)&unlocked_desc);
+	if (ret != 0) {
+		return ret;
+	}
+
 	secure_mass_runtime.descriptors_ready = true;
+	return 0;
 }
 
 #if defined(CONFIG_APP_SECURE_MASS_REENUM_SOFT_REBOOT)
@@ -355,13 +377,11 @@ static const uint8_t *get_active_descriptor(enum secure_usb_mode mode)
 
 static void configure_cfg_data_for_mode(enum secure_usb_mode mode)
 {
+	set_cfg_data_descriptors_for_mode(mode);
+
 	if (mode == SECURE_USB_MODE_LOCKED) {
-		secure_hid_config.interface_descriptor = &locked_desc.hid.if0;
-		secure_msc_config.interface_descriptor = NULL;
 		secure_msc_set_active(false);
 	} else {
-		secure_hid_config.interface_descriptor = &unlocked_desc.hid.if0;
-		secure_msc_config.interface_descriptor = &unlocked_desc.msc.if0;
 		secure_msc_set_active(true);
 	}
 }
@@ -373,6 +393,11 @@ const struct secure_hid_descriptor *secure_mass_get_active_hid_descriptor(void)
 	}
 
 	return &unlocked_desc.hid.if0_hid;
+}
+
+uint8_t secure_mass_get_active_msc_interface_number(void)
+{
+	return unlocked_desc.msc.if0.bInterfaceNumber;
 }
 
 static void secure_mass_set_runtime_mode(enum secure_usb_mode mode)
@@ -524,7 +549,11 @@ int secure_mass_usb_init(void)
 
 	k_work_init_delayable(&secure_mass_runtime.usb_switch_work,
 			      usb_switch_work_handler);
-	prepare_descriptors_once();
+	ret = prepare_descriptors_once();
+	if (ret != 0) {
+		LOG_ERR("Descriptor preparation failed (%d)", ret);
+		return ret;
+	}
 
 #if defined(CONFIG_APP_SECURE_MASS_REENUM_SOFT_REBOOT)
 	boot_mode = secure_mass_load_boot_mode();

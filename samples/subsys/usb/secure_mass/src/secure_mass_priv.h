@@ -216,5 +216,6 @@ void secure_mass_schedule_mode_switch(enum secure_usb_mode mode,
 void secure_mass_request_relock(void);
 int secure_mass_request_unlock(void);
 const struct secure_hid_descriptor *secure_mass_get_active_hid_descriptor(void);
+uint8_t secure_mass_get_active_msc_interface_number(void);
 
 #endif /* ZEPHYR_SAMPLES_SUBSYS_USB_SECURE_MASS_PRIV_H_ */

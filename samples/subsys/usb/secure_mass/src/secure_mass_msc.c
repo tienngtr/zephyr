@@ -97,7 +97,9 @@ void secure_msc_status_cb(struct usb_cfg_data *cfg,
 int secure_msc_class_handle_req(struct usb_setup_packet *setup,
 				int32_t *len, uint8_t **data)
 {
-	return msc_bot_class_handle_req(&secure_msc_ctx, 1U, setup, len, data);
+	return msc_bot_class_handle_req(&secure_msc_ctx,
+					secure_mass_get_active_msc_interface_number(),
+					setup, len, data);
 }
 
 int secure_msc_init(void)

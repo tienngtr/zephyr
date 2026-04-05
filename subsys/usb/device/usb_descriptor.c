@@ -389,7 +389,7 @@ static void usb_desc_update_mps0(struct usb_device_descriptor *const desc)
  * - just one device configuration (there is only one)
  * - string descriptor must be present
  */
-static int usb_fix_descriptor(struct usb_desc_header *head)
+static int usb_fix_descriptor_blob(struct usb_desc_header *head)
 {
 	struct usb_cfg_descriptor *cfg_descr = NULL;
 	struct usb_if_descriptor *if_descr = NULL;
@@ -493,12 +493,16 @@ static int usb_fix_descriptor(struct usb_desc_header *head)
 		head = (struct usb_desc_header *)((uint8_t *)head + head->bLength);
 	}
 
-	if ((head + 1) != __usb_descriptor_end) {
-		LOG_DBG("try to fix next descriptor at %p", head + 1);
-		return usb_fix_descriptor(head + 1);
+	return 0;
+}
+
+int usb_fix_descriptor(const uint8_t *device_descriptor)
+{
+	if (device_descriptor == NULL) {
+		return -EINVAL;
 	}
 
-	return 0;
+	return usb_fix_descriptor_blob((struct usb_desc_header *)device_descriptor);
 }
 
 
@@ -510,9 +514,25 @@ uint8_t *usb_get_device_descriptor(void)
 	LOG_DBG("__usb_descriptor_end %p", __usb_descriptor_end);
 
 	if (!initialized) {
-		if (usb_fix_descriptor(__usb_descriptor_start)) {
-			LOG_ERR("Failed to fixup USB descriptor");
-			return NULL;
+		struct usb_desc_header *head = __usb_descriptor_start;
+
+		while (true) {
+			if (usb_fix_descriptor_blob(head)) {
+				LOG_ERR("Failed to fixup USB descriptor");
+				return NULL;
+			}
+
+			while (head->bLength != 0U) {
+				head = (struct usb_desc_header *)
+					((uint8_t *)head + head->bLength);
+			}
+
+			if ((head + 1) == __usb_descriptor_end) {
+				break;
+			}
+
+			LOG_DBG("try to fix next descriptor at %p", head + 1);
+			head = head + 1;
 		}
 
 		initialized = true;
