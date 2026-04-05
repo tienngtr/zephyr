@@ -56,44 +56,6 @@
 
 #define HID_EP_BUSY_FLAG		0
 
-#define MSC_CBW_SIGNATURE		0x43425355
-#define MSC_CSW_SIGNATURE		0x53425355
-
-#define MSC_CBW_DIRECTION_DATA_IN	0x80
-
-#define MSC_CSW_STATUS_PASSED		0x00
-#define MSC_CSW_STATUS_FAILED		0x01
-#define MSC_CSW_STATUS_PHASE_ERROR	0x02
-
-#define SCSI_TEST_UNIT_READY		0x00
-#define SCSI_REQUEST_SENSE		0x03
-#define SCSI_INQUIRY			0x12
-#define SCSI_MODE_SENSE6		0x1A
-#define SCSI_START_STOP_UNIT		0x1B
-#define SCSI_MEDIA_REMOVAL		0x1E
-#define SCSI_READ_FORMAT_CAPACITIES	0x23
-#define SCSI_READ_CAPACITY		0x25
-#define SCSI_READ10			0x28
-#define SCSI_WRITE10			0x2A
-#define SCSI_VERIFY10			0x2F
-#define SCSI_READ12			0xA8
-#define SCSI_WRITE12			0xAA
-
-#define MSC_REQUEST_GET_MAX_LUN		0xFE
-#define MSC_REQUEST_RESET		0xFF
-
-#define SCSI_SENSE_NONE			0x00
-#define SCSI_SENSE_NOT_READY		0x02
-#define SCSI_SENSE_ILLEGAL_REQUEST	0x05
-
-#define SCSI_ASC_MEDIA_NOT_PRESENT	0x3A
-#define SCSI_ASC_INVALID_COMMAND	0x20
-
-#define THREAD_OP_NONE			0
-#define THREAD_OP_READ_QUEUED		1
-#define THREAD_OP_WRITE_QUEUED		2
-#define THREAD_OP_WRITE_DONE		3
-
 enum secure_cmd {
 	SECURE_CMD_GET_INFO = 0x01,
 	SECURE_CMD_UNLOCK = 0x02,
@@ -120,14 +82,6 @@ enum secure_state {
 enum secure_usb_mode {
 	SECURE_USB_MODE_LOCKED = 0,
 	SECURE_USB_MODE_UNLOCKED = 1,
-};
-
-enum secure_msc_stage {
-	MSC_STAGE_READ_CBW,
-	MSC_STAGE_ERROR,
-	MSC_STAGE_PROCESS_CBW,
-	MSC_STAGE_SEND_CSW,
-	MSC_STAGE_WAIT_CSW,
 };
 
 struct hid_pkt_v1 {
@@ -207,30 +161,6 @@ struct secure_unlocked_descriptor_set {
 	struct secure_msc_interface_desc msc;
 	struct secure_usb_strings strings;
 	struct usb_desc_header term;
-} __packed;
-
-struct msc_cbw {
-	uint32_t signature;
-	uint32_t tag;
-	uint32_t data_length;
-	uint8_t flags;
-	uint8_t lun;
-	uint8_t cb_length;
-	uint8_t cb[16];
-} __packed;
-
-struct msc_csw {
-	uint32_t signature;
-	uint32_t tag;
-	uint32_t data_residue;
-	uint8_t status;
-} __packed;
-
-struct msc_inquiry_data {
-	uint8_t head[8];
-	uint8_t t10_vid[8];
-	uint8_t product_id[16];
-	uint8_t revision[4];
 } __packed;
 
 struct secure_mass_runtime {

@@ -1,9 +1,18 @@
 # Copyright (c) 2016 Wind River Systems, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+config USB_DEVICE_MSC_BOT
+	bool
+	select DISK_ACCESS
+	help
+	  Internal helper for the legacy USB mass-storage Bulk-Only Transport
+	  core shared by the stock MSC class driver and applications that
+	  compose their own legacy MSC interface.
+
 menuconfig USB_MASS_STORAGE
 	bool "USB Mass Storage Device Class support"
 	select DISK_ACCESS
+	select USB_DEVICE_MSC_BOT
 	help
 	  USB Mass Storage device class support
 
