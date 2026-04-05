@@ -3,8 +3,16 @@
 # Copyright (c) 2018 Intel Corp.
 # SPDX-License-Identifier: Apache-2.0
 
+config USB_DEVICE_HID_COMMON
+	bool
+	help
+	  Internal helper for reusable legacy USB HID request and descriptor
+	  handling shared by the stock HID class driver and applications
+	  that compose their own legacy HID interface.
+
 menuconfig USB_DEVICE_HID
 	bool "USB Human Interface Device support"
+	select USB_DEVICE_HID_COMMON
 	help
 	  Enables USB Human Interface Device support. Default device name
 	  is "HID_0".

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 zephyr_sources_ifdef(CONFIG_USB_CDC_ACM cdc_acm.c)
+zephyr_sources_ifdef(CONFIG_USB_DEVICE_HID_COMMON hid/common.c)
 zephyr_sources_ifdef(CONFIG_USB_DEVICE_MSC_BOT msc_bot.c)
 zephyr_sources_ifdef(CONFIG_USB_MASS_STORAGE msc.c)
 zephyr_sources_ifdef(CONFIG_USB_DEVICE_BLUETOOTH bluetooth.c)

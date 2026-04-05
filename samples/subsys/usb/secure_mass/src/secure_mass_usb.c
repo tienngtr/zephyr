@@ -75,7 +75,7 @@ static struct secure_locked_descriptor_set locked_desc = {
 			.iInterface = 0,
 		},
 		.if0_hid = {
-			.bLength = sizeof(struct secure_hid_descriptor),
+			.bLength = sizeof(struct usb_hid_descriptor),
 			.bDescriptorType = USB_DESC_HID,
 			.bcdHID = sys_cpu_to_le16(USB_HID_VERSION),
 			.bCountryCode = 0,
@@ -174,7 +174,7 @@ static struct secure_unlocked_descriptor_set unlocked_desc = {
 			.iInterface = 0,
 		},
 		.if0_hid = {
-			.bLength = sizeof(struct secure_hid_descriptor),
+			.bLength = sizeof(struct usb_hid_descriptor),
 			.bDescriptorType = USB_DESC_HID,
 			.bcdHID = sys_cpu_to_le16(USB_HID_VERSION),
 			.bCountryCode = 0,
@@ -268,8 +268,7 @@ static void secure_hid_interface_config(struct usb_desc_header *head,
 		CONTAINER_OF(if_desc, struct secure_hid_interface_desc, if0);
 
 	desc->if0.bInterfaceNumber = bInterfaceNumber;
-	sys_put_le16(SECURE_HID_REPORT_DESC_SIZE,
-		     (uint8_t *)&desc->if0_hid.subdesc[0].wDescriptorLength);
+	usb_hid_set_report_size(&desc->if0_hid, SECURE_HID_REPORT_DESC_SIZE);
 }
 
 static void secure_msc_interface_config(struct usb_desc_header *head,
@@ -386,7 +385,7 @@ static void configure_cfg_data_for_mode(enum secure_usb_mode mode)
 	}
 }
 
-const struct secure_hid_descriptor *secure_mass_get_active_hid_descriptor(void)
+const struct usb_hid_descriptor *secure_mass_get_active_hid_descriptor(void)
 {
 	if (secure_mass_runtime.usb_mode == SECURE_USB_MODE_LOCKED) {
 		return &locked_desc.hid.if0_hid;

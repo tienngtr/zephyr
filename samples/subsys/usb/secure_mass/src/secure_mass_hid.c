@@ -45,6 +45,20 @@ static void handle_get_info(const struct hid_pkt_v1 *req);
 static void handle_unlock(const struct hid_pkt_v1 *req);
 static void handle_change_password(const struct hid_pkt_v1 *req);
 static void handle_hid_request(const struct hid_pkt_v1 *req);
+static int secure_hid_get_idle(void *context, struct usb_setup_packet *setup,
+			       int32_t *len, uint8_t **data);
+static int secure_hid_get_report(void *context, struct usb_setup_packet *setup,
+				 int32_t *len, uint8_t **data);
+static int secure_hid_get_protocol(void *context,
+				   struct usb_setup_packet *setup,
+				   int32_t *len, uint8_t **data);
+static int secure_hid_set_idle(void *context, struct usb_setup_packet *setup,
+			       int32_t *len, uint8_t **data);
+static int secure_hid_set_report(void *context, struct usb_setup_packet *setup,
+				 int32_t *len, uint8_t **data);
+static int secure_hid_set_protocol(void *context,
+				   struct usb_setup_packet *setup,
+				   int32_t *len, uint8_t **data);
 static void secure_hid_int_in(uint8_t ep,
 			      enum usb_dc_ep_cb_status_code ep_status);
 static void secure_hid_int_out(uint8_t ep,
@@ -59,6 +73,15 @@ struct usb_ep_cfg_data secure_hid_ep_data[SECURE_HID_NUM_ENDPOINTS] = {
 		.ep_cb = secure_hid_int_out,
 		.ep_addr = SECURE_HID_OUT_EP_ADDR,
 	},
+};
+
+static const struct usb_hid_req_handlers secure_hid_req_handlers = {
+	.get_idle = secure_hid_get_idle,
+	.get_report = secure_hid_get_report,
+	.get_protocol = secure_hid_get_protocol,
+	.set_idle = secure_hid_set_idle,
+	.set_report = secure_hid_set_report,
+	.set_protocol = secure_hid_set_protocol,
 };
 
 static void queue_hid_packet(const uint8_t *buf, size_t len)
@@ -263,6 +286,78 @@ static void handle_hid_request(const struct hid_pkt_v1 *req)
 	}
 }
 
+static int secure_hid_get_idle(void *context, struct usb_setup_packet *setup,
+			       int32_t *len, uint8_t **data)
+{
+	ARG_UNUSED(context);
+	ARG_UNUSED(setup);
+
+	*data = &secure_mass_runtime.hid_idle_rate;
+	*len = 1;
+	return 0;
+}
+
+static int secure_hid_get_report(void *context, struct usb_setup_packet *setup,
+				 int32_t *len, uint8_t **data)
+{
+	static uint8_t zero_report[SECURE_HID_PKT_LEN];
+
+	ARG_UNUSED(context);
+
+	*data = zero_report;
+	*len = MIN(setup->wLength, sizeof(zero_report));
+	return 0;
+}
+
+static int secure_hid_get_protocol(void *context,
+				   struct usb_setup_packet *setup,
+				   int32_t *len, uint8_t **data)
+{
+	ARG_UNUSED(context);
+	ARG_UNUSED(setup);
+
+	*data = &secure_mass_runtime.hid_protocol;
+	*len = 1;
+	return 0;
+}
+
+static int secure_hid_set_idle(void *context, struct usb_setup_packet *setup,
+			       int32_t *len, uint8_t **data)
+{
+	ARG_UNUSED(context);
+	ARG_UNUSED(len);
+	ARG_UNUSED(data);
+
+	secure_mass_runtime.hid_idle_rate = (uint8_t)(setup->wValue >> 8);
+	return 0;
+}
+
+static int secure_hid_set_report(void *context, struct usb_setup_packet *setup,
+				 int32_t *len, uint8_t **data)
+{
+	ARG_UNUSED(context);
+	ARG_UNUSED(setup);
+
+	if (*len > SECURE_HID_PKT_LEN) {
+		return -EINVAL;
+	}
+
+	queue_hid_packet(*data, *len);
+	return 0;
+}
+
+static int secure_hid_set_protocol(void *context,
+				   struct usb_setup_packet *setup,
+				   int32_t *len, uint8_t **data)
+{
+	ARG_UNUSED(context);
+	ARG_UNUSED(len);
+	ARG_UNUSED(data);
+
+	secure_mass_runtime.hid_protocol = (uint8_t)setup->wValue;
+	return 0;
+}
+
 static void secure_hid_int_in(uint8_t ep,
 			      enum usb_dc_ep_cb_status_code ep_status)
 {
@@ -316,76 +411,18 @@ void secure_hid_status_cb(struct usb_cfg_data *cfg,
 int secure_hid_class_handle_req(struct usb_setup_packet *setup,
 				int32_t *len, uint8_t **data)
 {
-	static uint8_t zero_report[SECURE_HID_PKT_LEN];
-
-	if ((setup->wIndex & 0xFF) != 0U) {
-		return -ENOTSUP;
-	}
-
-	if (usb_reqtype_is_to_host(setup)) {
-		switch (setup->bRequest) {
-		case USB_HID_GET_IDLE:
-			*data = &secure_mass_runtime.hid_idle_rate;
-			*len = 1;
-			return 0;
-		case USB_HID_GET_PROTOCOL:
-			*data = &secure_mass_runtime.hid_protocol;
-			*len = 1;
-			return 0;
-		case USB_HID_GET_REPORT:
-			*data = zero_report;
-			*len = MIN(setup->wLength, sizeof(zero_report));
-			return 0;
-		default:
-			return -ENOTSUP;
-		}
-	}
-
-	switch (setup->bRequest) {
-	case USB_HID_SET_IDLE:
-		secure_mass_runtime.hid_idle_rate = (uint8_t)(setup->wValue >> 8);
-		return 0;
-	case USB_HID_SET_PROTOCOL:
-		secure_mass_runtime.hid_protocol = (uint8_t)setup->wValue;
-		return 0;
-	case USB_HID_SET_REPORT:
-		if (*len > SECURE_HID_PKT_LEN) {
-			return -EINVAL;
-		}
-		queue_hid_packet(*data, *len);
-		return 0;
-	default:
-		return -ENOTSUP;
-	}
+	return usb_hid_handle_class_request(0U, &secure_hid_req_handlers, NULL,
+						 setup, len, data);
 }
 
 int secure_hid_custom_handle_req(struct usb_setup_packet *setup,
 				 int32_t *len, uint8_t **data)
 {
-	uint8_t value;
-
-	if (!usb_reqtype_is_to_host(setup) ||
-	    setup->RequestType.recipient != USB_REQTYPE_RECIPIENT_INTERFACE ||
-	    setup->bRequest != USB_SREQ_GET_DESCRIPTOR ||
-	    (setup->wIndex & 0xFF) != 0U) {
-		return -EINVAL;
-	}
-
-	value = (uint8_t)(setup->wValue >> 8);
-
-	switch (value) {
-	case USB_DESC_HID:
-		*data = (uint8_t *)secure_mass_get_active_hid_descriptor();
-		*len = MIN(setup->wLength,
-			   ((struct secure_hid_descriptor *)*data)->bLength);
-		return 0;
-	case USB_DESC_HID_REPORT:
-		*data = (uint8_t *)secure_hid_report_desc;
-		*len = MIN(setup->wLength, sizeof(secure_hid_report_desc));
-		return 0;
-	default:
-		return -ENOTSUP;
-	}
+	return usb_hid_handle_descriptor_request(0U,
+						 secure_mass_get_active_hid_descriptor(),
+						 secure_hid_report_desc,
+						 sizeof(secure_hid_report_desc),
+						 setup, len, data);
 }
 
 void secure_hid_process_loop(void)

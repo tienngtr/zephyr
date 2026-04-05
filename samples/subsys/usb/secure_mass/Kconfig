@@ -4,6 +4,7 @@
 config APP_SECURE_MASS
 	bool
 	default y
+	select USB_DEVICE_HID_COMMON
 	select USB_DEVICE_MSC_BOT
 
 menu "Secure mass sample options"

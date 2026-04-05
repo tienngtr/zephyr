@@ -16,7 +16,7 @@
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
-#include <zephyr/usb/class/hid.h>
+#include <zephyr/usb/class/usb_hid.h>
 #include <zephyr/usb/usb_device.h>
 
 #include <usb_descriptor.h>
@@ -101,23 +101,9 @@ struct hid_rx_msg {
 	uint8_t data[SECURE_HID_PKT_LEN];
 };
 
-struct usb_hid_class_subdescriptor {
-	uint8_t bDescriptorType;
-	uint16_t wDescriptorLength;
-} __packed;
-
-struct secure_hid_descriptor {
-	uint8_t bLength;
-	uint8_t bDescriptorType;
-	uint16_t bcdHID;
-	uint8_t bCountryCode;
-	uint8_t bNumDescriptors;
-	struct usb_hid_class_subdescriptor subdesc[1];
-} __packed;
-
 struct secure_hid_interface_desc {
 	struct usb_if_descriptor if0;
-	struct secure_hid_descriptor if0_hid;
+	struct usb_hid_descriptor if0_hid;
 	struct usb_ep_descriptor if0_in_ep;
 	struct usb_ep_descriptor if0_out_ep;
 } __packed;
@@ -215,7 +201,7 @@ void secure_mass_schedule_mode_switch(enum secure_usb_mode mode,
 				      k_timeout_t delay);
 void secure_mass_request_relock(void);
 int secure_mass_request_unlock(void);
-const struct secure_hid_descriptor *secure_mass_get_active_hid_descriptor(void);
+const struct usb_hid_descriptor *secure_mass_get_active_hid_descriptor(void);
 uint8_t secure_mass_get_active_msc_interface_number(void);
 
 #endif /* ZEPHYR_SAMPLES_SUBSYS_USB_SECURE_MASS_PRIV_H_ */
