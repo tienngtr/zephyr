@@ -7,6 +7,7 @@ target_sources(app PRIVATE
 	src/main.c
 	src/secure_mass_button.c
 	src/secure_mass_hid.c
+	src/secure_mass_indicator.c
 	src/secure_mass_msc.c
 	src/secure_mass_usb.c
 )

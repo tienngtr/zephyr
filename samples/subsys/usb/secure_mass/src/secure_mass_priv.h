@@ -273,6 +273,8 @@ int secure_msc_init(void);
 void secure_msc_set_active(bool active);
 
 int secure_mass_button_init(void);
+int secure_mass_indicator_init(void);
+void secure_mass_indicator_update(enum secure_state state);
 
 int secure_mass_usb_init_locked(void);
 void secure_mass_schedule_mode_switch(enum secure_usb_mode mode,

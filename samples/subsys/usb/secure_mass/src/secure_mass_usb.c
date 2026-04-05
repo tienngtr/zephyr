@@ -386,6 +386,7 @@ static int apply_usb_mode(enum secure_usb_mode mode)
 	secure_mass_runtime.state = (mode == SECURE_USB_MODE_LOCKED) ?
 		SECURE_STATE_LOCKED : SECURE_STATE_UNLOCKED;
 	secure_mass_runtime.usb_switch_in_progress = false;
+	secure_mass_indicator_update(secure_mass_runtime.state);
 
 	LOG_INF("USB mode is now %s",
 		mode == SECURE_USB_MODE_LOCKED ? "locked (HID)" :
@@ -459,5 +460,6 @@ int secure_mass_usb_init_locked(void)
 		return ret;
 	}
 
+	secure_mass_indicator_update(SECURE_STATE_LOCKED);
 	return 0;
 }
