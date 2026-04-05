@@ -51,6 +51,8 @@
 #define SECURE_RELOCK_DELAY_MS		300
 #define SECURE_DISCONNECT_DELAY_MS	10
 
+#define SECURE_BOOT_MODE_MAGIC		0x534d5355U
+
 #define HID_EP_BUSY_FLAG		0
 
 #define MSC_CBW_SIGNATURE		0x43425355
@@ -237,6 +239,7 @@ struct secure_mass_runtime {
 	bool descriptors_ready;
 	bool usb_switch_in_progress;
 	bool hid_configured;
+	bool unlocked_configured_once;
 	uint8_t hid_idle_rate;
 	uint8_t hid_protocol;
 	atomic_t hid_flags[1];
@@ -276,7 +279,7 @@ int secure_mass_button_init(void);
 int secure_mass_indicator_init(void);
 void secure_mass_indicator_update(enum secure_state state);
 
-int secure_mass_usb_init_locked(void);
+int secure_mass_usb_init(void);
 void secure_mass_schedule_mode_switch(enum secure_usb_mode mode,
 				      k_timeout_t delay);
 void secure_mass_request_relock(void);

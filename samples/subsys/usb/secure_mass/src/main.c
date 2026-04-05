@@ -29,7 +29,7 @@ int main(void)
 		return ret;
 	}
 
-	ret = secure_mass_usb_init_locked();
+	ret = secure_mass_usb_init();
 	if (ret != 0) {
 		return ret;
 	}
