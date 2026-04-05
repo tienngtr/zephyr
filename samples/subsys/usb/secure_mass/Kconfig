@@ -27,6 +27,22 @@ config APP_SECURE_MASS_REENUM_USB_DISABLE_ENABLE
 
 endchoice
 
+config APP_SECURE_MASS_USER_BUTTON_UNLOCK
+	bool "Enable unlock via board user button"
+	default y
+	select GPIO
+	help
+	  Allow the board's user button (for example DT alias sw0 on
+	  stm32f4_disco) to request an unlock transition.
+
+config APP_SECURE_MASS_LOCK_STATUS_INDICATOR
+	bool "Enable lock status LED indicator"
+	default y
+	select GPIO
+	help
+	  Drive board LEDs to show lock state. The secure_mass sample uses
+	  red for locked and green for unlocked on stm32f4_disco.
+
 endmenu
 
 source "Kconfig.zephyr"

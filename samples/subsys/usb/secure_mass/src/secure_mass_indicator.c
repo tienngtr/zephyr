@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#if defined(CONFIG_APP_SECURE_MASS_LOCK_STATUS_INDICATOR)
+
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
 
@@ -72,3 +74,19 @@ void secure_mass_indicator_update(enum secure_state state)
 		break;
 	}
 }
+
+#else
+
+#include "secure_mass_priv.h"
+
+int secure_mass_indicator_init(void)
+{
+	return 0;
+}
+
+void secure_mass_indicator_update(enum secure_state state)
+{
+	ARG_UNUSED(state);
+}
+
+#endif

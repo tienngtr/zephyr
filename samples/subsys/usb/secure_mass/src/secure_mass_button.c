@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#if defined(CONFIG_APP_SECURE_MASS_USER_BUTTON_UNLOCK)
+
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -84,3 +86,14 @@ int secure_mass_button_init(void)
 
 	return 0;
 }
+
+#else
+
+#include "secure_mass_priv.h"
+
+int secure_mass_button_init(void)
+{
+	return 0;
+}
+
+#endif
