@@ -422,6 +422,22 @@ void secure_mass_request_relock(void)
 	}
 }
 
+int secure_mass_request_unlock(void)
+{
+	if (secure_mass_runtime.usb_switch_in_progress ||
+	    secure_mass_is_transition_state()) {
+		return -EBUSY;
+	}
+
+	if (secure_mass_runtime.state != SECURE_STATE_LOCKED) {
+		return -EALREADY;
+	}
+
+	secure_mass_schedule_mode_switch(SECURE_USB_MODE_UNLOCKED,
+					 K_MSEC(SECURE_UNLOCK_DELAY_MS));
+	return 0;
+}
+
 int secure_mass_usb_init_locked(void)
 {
 	int ret;

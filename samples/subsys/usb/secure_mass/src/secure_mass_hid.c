@@ -187,9 +187,13 @@ static void handle_unlock(const struct hid_pkt_v1 *req)
 		return;
 	}
 
+	if (secure_mass_request_unlock() != 0) {
+		send_hid_response(req->cmd, req->seq,
+				  SECURE_STATUS_INTERNAL_ERROR, NULL, 0);
+		return;
+	}
+
 	send_hid_response(req->cmd, req->seq, SECURE_STATUS_OK, NULL, 0);
-	secure_mass_schedule_mode_switch(SECURE_USB_MODE_UNLOCKED,
-					 K_MSEC(SECURE_UNLOCK_DELAY_MS));
 }
 
 static void handle_change_password(const struct hid_pkt_v1 *req)

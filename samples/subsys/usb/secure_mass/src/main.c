@@ -19,6 +19,11 @@ int main(void)
 		return ret;
 	}
 
+	ret = secure_mass_button_init();
+	if (ret != 0) {
+		return ret;
+	}
+
 	ret = secure_mass_usb_init_locked();
 	if (ret != 0) {
 		return ret;
