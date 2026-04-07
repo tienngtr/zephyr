@@ -127,18 +127,11 @@ static const struct gpio_dt_spec ulpi_reset =
 #define EP_MPS USB_OTG_FS_MAX_PACKET_SIZE
 #endif
 
-/* We need n TX IN FIFOs */
-#define TX_FIFO_NUM USB_NUM_BIDIR_ENDPOINTS
-
 /* We need a minimum size for RX FIFO - exact number seemingly determined through trial and error */
 #define RX_FIFO_EP_WORDS 160
 
-/* Allocate FIFO memory evenly between the TX FIFOs */
-/* except the first TX endpoint need only 64 bytes */
+/* EP0 only needs 64 bytes, which corresponds to 16 FIFO words. */
 #define TX_FIFO_EP_0_WORDS 16
-#define TX_FIFO_WORDS (USB_RAM_SIZE / 4 - RX_FIFO_EP_WORDS - TX_FIFO_EP_0_WORDS)
-/* Number of words for each remaining TX endpoint FIFO */
-#define TX_FIFO_EP_WORDS (TX_FIFO_WORDS / (TX_FIFO_NUM - 1))
 
 #endif /* USB */
 
@@ -203,6 +196,58 @@ struct usb_dc_stm32_state {
 K_THREAD_STACK_DEFINE(usb_dc_stm32_thr_stk, USB_ISR_LOWER_HALF_THREAD_STACK_SIZE);
 
 static struct usb_dc_stm32_state usb_dc_stm32_state;
+
+#if defined(USB_OTG_FS) || defined(USB_OTG_HS)
+static int usb_dc_stm32_configure_tx_fifos(void)
+{
+	uint16_t fifo_words[USB_NUM_BIDIR_ENDPOINTS] = { TX_FIFO_EP_0_WORDS };
+	uint32_t remaining_words = (USB_RAM_SIZE / 4U) - RX_FIFO_EP_WORDS - TX_FIFO_EP_0_WORDS;
+	uint8_t max_in_ep_idx = 0U;
+	unsigned int i;
+
+	/*
+	 * Reserve enough FIFO space for each enabled IN endpoint, then hand the
+	 * remainder to the highest active IN endpoint so HS bulk transfers can
+	 * fit a full max packet.
+	 */
+	for (i = 1U; i < USB_NUM_BIDIR_ENDPOINTS; i++) {
+		if (usb_dc_stm32_state.in_ep_state[i].ep_mps > 0U) {
+			max_in_ep_idx = i;
+		}
+	}
+
+	for (i = 1U; i <= max_in_ep_idx; i++) {
+		uint16_t words;
+
+		if (usb_dc_stm32_state.in_ep_state[i].ep_mps > 0U) {
+			words = MAX(DIV_ROUND_UP(usb_dc_stm32_state.in_ep_state[i].ep_mps,
+						 sizeof(uint32_t)), 16U);
+		} else {
+			words = 16U;
+		}
+
+		if (remaining_words < words) {
+			LOG_ERR("Not enough TX FIFO RAM for ep %u: remaining=%lu need=%u",
+				i, (unsigned long)remaining_words, words);
+			return -ENOMEM;
+		}
+
+		fifo_words[i] = words;
+		remaining_words -= words;
+	}
+
+	if (max_in_ep_idx > 0U) {
+		fifo_words[max_in_ep_idx] += remaining_words;
+	}
+
+	HAL_PCDEx_SetRxFiFo(&usb_dc_stm32_state.pcd, RX_FIFO_EP_WORDS);
+	for (i = 0U; i < USB_NUM_BIDIR_ENDPOINTS; i++) {
+		HAL_PCDEx_SetTxFiFo(&usb_dc_stm32_state.pcd, i, fifo_words[i]);
+	}
+
+	return 0;
+}
+#endif
 
 /* Internal functions */
 
@@ -558,18 +603,13 @@ static int usb_dc_stm32_init(void)
 	}
 #else /* USB_OTG_FS */
 
-	/* TODO: make this dynamic (depending usage) */
-	HAL_PCDEx_SetRxFiFo(&usb_dc_stm32_state.pcd, RX_FIFO_EP_WORDS);
 	for (i = 0U; i < USB_NUM_BIDIR_ENDPOINTS; i++) {
-		if (i == 0) {
-			/* first endpoint need only 64 byte for EP_TYPE_CTRL */
-			HAL_PCDEx_SetTxFiFo(&usb_dc_stm32_state.pcd, i,
-					TX_FIFO_EP_0_WORDS);
-		} else {
-			HAL_PCDEx_SetTxFiFo(&usb_dc_stm32_state.pcd, i,
-					TX_FIFO_EP_WORDS);
-		}
 		k_sem_init(&usb_dc_stm32_state.in_ep_state[i].write_sem, 1, 1);
+	}
+
+	ret = usb_dc_stm32_configure_tx_fifos();
+	if (ret) {
+		return ret;
 	}
 #endif /* USB */
 
@@ -898,6 +938,17 @@ int usb_dc_ep_enable(const uint8_t ep)
 	if (!ep_state) {
 		return -EINVAL;
 	}
+
+#if defined(USB_OTG_FS) || defined(USB_OTG_HS)
+	if (USB_EP_DIR_IS_IN(ep)) {
+		int ret;
+
+		ret = usb_dc_stm32_configure_tx_fifos();
+		if (ret) {
+			return ret;
+		}
+	}
+#endif
 
 	LOG_DBG("HAL_PCD_EP_Open(0x%02x, %u, %u)", ep, ep_state->ep_mps,
 		ep_state->ep_type);
