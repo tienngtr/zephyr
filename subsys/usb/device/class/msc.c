@@ -108,6 +108,8 @@ struct CSW {
 #define LOGIN				0xF4
 #define LOGOUT				0xF5
 #define LOGIN_RETURN			0xF6
+#define READ_SECURE			0xFD
+#define WRITE_SECURE			0xFE
 
 /* max USB packet size */
 #define MAX_PACKET	CONFIG_MASS_STORAGE_BULK_EP_MPS
@@ -549,6 +551,8 @@ static bool infoTransfer(void)
 	switch (cbw.CB[0]) {
 	case READ10:
 	case WRITE10:
+	case READ_SECURE:
+	case WRITE_SECURE:
 	case VERIFY10:
 		n = sys_get_be16(&cbw.CB[7]);
 		break;
@@ -635,6 +639,17 @@ static bool check_cbw_data_length_range(uint32_t min, uint32_t max)
 	return true;
 }
 
+static bool check_logged_in(void)
+{
+	if (!logged_in) {
+		LOG_WRN("Secure command rejected while logged out");
+		fail();
+		return false;
+	}
+
+	return true;
+}
+
 static void CBWDecode(uint8_t *buf, uint16_t size)
 {
 	if (size != sizeof(cbw)) {
@@ -706,9 +721,44 @@ static void CBWDecode(uint8_t *buf, uint16_t size)
 				}
 			}
 			break;
+		case READ_SECURE:
+			LOG_DBG(">> READ_SECURE");
+			if (!check_logged_in()) {
+				break;
+			}
+			if (infoTransfer()) {
+				if ((cbw.Flags & 0x80)) {
+					stage = MSC_PROCESS_CBW;
+					memoryRead();
+				} else {
+					usb_ep_set_stall(
+					  mass_ep_data[MSD_OUT_EP_IDX].ep_addr);
+					LOG_WRN("Stall OUT endpoint");
+					csw.Status = CSW_ERROR;
+					sendCSW();
+				}
+			}
+			break;
 		case WRITE10:
 		case WRITE12:
 			LOG_DBG(">> WRITE");
+			if (infoTransfer()) {
+				if (!(cbw.Flags & 0x80)) {
+					stage = MSC_PROCESS_CBW;
+				} else {
+					usb_ep_set_stall(
+					  mass_ep_data[MSD_IN_EP_IDX].ep_addr);
+					LOG_WRN("Stall IN endpoint");
+					csw.Status = CSW_ERROR;
+					sendCSW();
+				}
+			}
+			break;
+		case WRITE_SECURE:
+			LOG_DBG(">> WRITE_SECURE");
+			if (!check_logged_in()) {
+				break;
+			}
 			if (infoTransfer()) {
 				if (!(cbw.Flags & 0x80)) {
 					stage = MSC_PROCESS_CBW;
@@ -899,6 +949,7 @@ static void mass_storage_bulk_out(uint8_t ep,
 			LOG_DBG("> BO - PROC_CBW LOGIN");
 			login(bo_buf, bytes_read);
 			break;
+		case WRITE_SECURE:
 		case WRITE10:
 		case WRITE12:
 			/* LOG_DBG("> BO - PROC_CBW WR");*/
@@ -983,6 +1034,7 @@ static void mass_storage_bulk_in(uint8_t ep,
 	/*the device has to send data to the host*/
 	case MSC_PROCESS_CBW:
 		switch (cbw.CB[0]) {
+		case READ_SECURE:
 		case READ10:
 		case READ12:
 			/* LOG_DBG("< BI - PROC_CBW  READ"); */
