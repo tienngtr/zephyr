@@ -105,6 +105,10 @@ struct CSW {
 #define MODE_SELECT10			0x55
 #define MODE_SENSE10			0x5A
 
+#define LOGIN				0xF4
+#define LOGOUT				0xF5
+#define LOGIN_RETURN			0xF6
+
 /* max USB packet size */
 #define MAX_PACKET	CONFIG_MASS_STORAGE_BULK_EP_MPS
 
@@ -240,9 +244,16 @@ static uint8_t max_lun_count;
 /*memory OK (after a memoryVerify)*/
 static bool memOK;
 
+static bool logged_in;
+static const uint8_t login_password[] = "12345678";
+
 #define INQ_VENDOR_ID_LEN 8
 #define INQ_PRODUCT_ID_LEN 16
 #define INQ_REVISION_LEN 4
+
+#define LOGIN_PASSWORD_MIN_LEN		8U
+#define LOGIN_PASSWORD_MAX_LEN		16U
+#define LOGIN_RETURN_DATA_LEN		2U
 
 struct dabc_inquiry_data {
 	uint8_t head[8];
@@ -280,6 +291,7 @@ static void msd_init(void)
 	curr_lba = 0U;
 	length = 0U;
 	curr_offset = 0U;
+	logged_in = false;
 }
 
 static void sendCSW(void)
@@ -559,6 +571,70 @@ static bool infoTransfer(void)
 	return true;
 }
 
+static void logout(void)
+{
+	if (cbw.DataLength != 0U) {
+		fail();
+		return;
+	}
+
+	logged_in = false;
+	csw.Status = CSW_PASSED;
+	sendCSW();
+}
+
+static bool loginReturn(void)
+{
+	static const uint8_t login_ok[LOGIN_RETURN_DATA_LEN] = "OK";
+	static const uint8_t login_no[LOGIN_RETURN_DATA_LEN] = "NO";
+
+	return write((uint8_t *)(logged_in ? login_ok : login_no),
+		     LOGIN_RETURN_DATA_LEN);
+}
+
+static void login(uint8_t *buf, uint16_t size)
+{
+	if ((size != cbw.DataLength) || (size != length)) {
+		LOG_WRN("Unexpected LOGIN payload size %u expected %u",
+			size, cbw.DataLength);
+		fail();
+		return;
+	}
+
+	if (!logged_in) {
+		logged_in = (size == (sizeof(login_password) - 1U)) &&
+			    (memcmp(buf, login_password, size) == 0);
+	}
+	length -= size;
+	csw.DataResidue -= size;
+	csw.Status = CSW_PASSED;
+	sendCSW();
+}
+
+static bool check_cbw_data_length_exact(uint32_t expected)
+{
+	if (cbw.DataLength != expected) {
+		LOG_WRN("Unexpected CBW length %u expected %u",
+			cbw.DataLength, expected);
+		fail();
+		return false;
+	}
+
+	return true;
+}
+
+static bool check_cbw_data_length_range(uint32_t min, uint32_t max)
+{
+	if ((cbw.DataLength < min) || (cbw.DataLength > max)) {
+		LOG_WRN("Unexpected CBW length %u expected %u..%u",
+			cbw.DataLength, min, max);
+		fail();
+		return false;
+	}
+
+	return true;
+}
+
 static void CBWDecode(uint8_t *buf, uint16_t size)
 {
 	if (size != sizeof(cbw)) {
@@ -669,6 +745,44 @@ static void CBWDecode(uint8_t *buf, uint16_t size)
 			LOG_DBG(">> MEDIA_REMOVAL");
 			csw.Status = CSW_PASSED;
 			sendCSW();
+			break;
+		case LOGIN:
+			LOG_DBG(">> LOGIN");
+			if (!check_cbw_data_length_range(LOGIN_PASSWORD_MIN_LEN,
+							 LOGIN_PASSWORD_MAX_LEN)) {
+				break;
+			}
+			if ((cbw.Flags & CBW_DIRECTION_DATA_IN) != 0U) {
+				usb_ep_set_stall(
+					mass_ep_data[MSD_IN_EP_IDX].ep_addr);
+				LOG_WRN("Stall IN endpoint");
+				csw.Status = CSW_ERROR;
+				sendCSW();
+				break;
+			}
+
+			length = cbw.DataLength;
+			stage = MSC_PROCESS_CBW;
+			break;
+		case LOGOUT:
+			LOG_DBG(">> LOGOUT");
+			logout();
+			break;
+		case LOGIN_RETURN:
+			LOG_DBG(">> LOGIN_RETURN");
+			if (!check_cbw_data_length_exact(LOGIN_RETURN_DATA_LEN)) {
+				break;
+			}
+			if ((cbw.Flags & CBW_DIRECTION_DATA_IN) == 0U) {
+				usb_ep_set_stall(
+					mass_ep_data[MSD_OUT_EP_IDX].ep_addr);
+				LOG_WRN("Stall OUT endpoint");
+				csw.Status = CSW_ERROR;
+				sendCSW();
+				break;
+			}
+
+			loginReturn();
 			break;
 		default:
 			LOG_WRN(">> default CB[0] %x", cbw.CB[0]);
@@ -781,6 +895,10 @@ static void mass_storage_bulk_out(uint8_t ep,
 	/*the device has to receive data from the host*/
 	case MSC_PROCESS_CBW:
 		switch (cbw.CB[0]) {
+		case LOGIN:
+			LOG_DBG("> BO - PROC_CBW LOGIN");
+			login(bo_buf, bytes_read);
+			break;
 		case WRITE10:
 		case WRITE12:
 			/* LOG_DBG("> BO - PROC_CBW WR");*/
