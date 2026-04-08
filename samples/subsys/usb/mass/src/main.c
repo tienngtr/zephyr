@@ -7,6 +7,7 @@
 
 #include <sample_usbd.h>
 
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/usb/usb_device.h>
@@ -34,6 +35,44 @@ FS_LITTLEFS_DECLARE_DEFAULT_CONFIG(storage);
 #define STORAGE_PARTITION_ID		FIXED_PARTITION_ID(STORAGE_PARTITION)
 
 static struct fs_mount_t fs_mnt;
+
+#if DT_HAS_COMPAT_STATUS_OKAY(st_stm32f746g_disco) && DT_NODE_EXISTS(DT_NODELABEL(ltdc))
+#define STM32F746G_DISCO_LCD_NODE DT_NODELABEL(ltdc)
+static const struct gpio_dt_spec lcd_disp_on_gpio =
+	GPIO_DT_SPEC_GET_OR(STM32F746G_DISCO_LCD_NODE, disp_on_gpios, {0});
+static const struct gpio_dt_spec lcd_bl_ctrl_gpio =
+	GPIO_DT_SPEC_GET_OR(STM32F746G_DISCO_LCD_NODE, bl_ctrl_gpios, {0});
+
+static void disable_optional_gpio(const struct gpio_dt_spec *gpio, const char *name)
+{
+	int ret;
+
+	if (gpio->port == NULL) {
+		return;
+	}
+
+	if (!gpio_is_ready_dt(gpio)) {
+		LOG_WRN("%s GPIO controller is not ready", name);
+		return;
+	}
+
+	ret = gpio_pin_configure_dt(gpio, GPIO_OUTPUT_INACTIVE);
+	if (ret < 0) {
+		LOG_WRN("Failed to disable %s (%d)", name, ret);
+	}
+}
+
+static void disable_board_lcd(void)
+{
+	/* Shut down the unused LCD panel and backlight on STM32F746G-DISCO. */
+	disable_optional_gpio(&lcd_disp_on_gpio, "LCD panel");
+	disable_optional_gpio(&lcd_bl_ctrl_gpio, "LCD backlight");
+}
+#else
+static void disable_board_lcd(void)
+{
+}
+#endif
 
 #if defined(CONFIG_USB_DEVICE_STACK_NEXT)
 static struct usbd_context *sample_usbd;
@@ -207,6 +246,7 @@ int main(void)
 {
 	int ret;
 
+	disable_board_lcd();
 	setup_disk();
 
 #if defined(CONFIG_USB_DEVICE_STACK_NEXT)
