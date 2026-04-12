@@ -66,6 +66,15 @@ config USB_DC_STM32_CLOCK_CHECK
 	  In specific cases, this check might provide wrong verdict and should
 	  be disabled.
 
+config USB_DC_STM32_CALLBACKS_IN_ISR
+	bool "Invoke USB OUT callbacks from ISR context"
+	depends on USB_DC_STM32
+	help
+	  Invoke USB DATA OUT endpoint callbacks directly from the ISR instead of
+	  the driver lower-half thread. This can reduce bulk OUT latency for
+	  write-heavy legacy MSC workloads while keeping SETUP, IN, and status
+	  callbacks on the default thread-context path.
+
 config USB_DC_SAM0
 	bool "SAM0 series USB Device Controller driver"
 	default y

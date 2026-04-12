@@ -276,6 +276,7 @@ static int usb_dc_stm32_configure_tx_fifos(void)
 	SEND_MSG_TO_LOWERHALF(ep_cb_status, _status, _ep)
 
 int usb_dc_ep_start_read(uint8_t ep, uint8_t *data, uint32_t max_data_len);
+static struct usb_dc_stm32_ep_state *usb_dc_stm32_get_ep_state(uint8_t ep);
 
 static void usb_dc_stm32_isr_lower_half(void *a1, void *a2, void *a3)
 {
@@ -1285,7 +1286,13 @@ void HAL_PCD_DataOutStageCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
 	usb_dc_ep_get_read_count(ep, &ep_state->read_count);
 	ep_state->read_offset = 0U;
 
+#ifdef CONFIG_USB_DC_STM32_CALLBACKS_IN_ISR
+	if (ep_state->cb != NULL) {
+		ep_state->cb(ep, USB_DC_EP_DATA_OUT);
+	}
+#else
 	usb_dc_stm32_send_ep_msg(ep, USB_DC_EP_DATA_OUT);
+#endif
 }
 
 void HAL_PCD_DataInStageCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)

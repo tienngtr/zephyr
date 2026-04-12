@@ -109,9 +109,12 @@ struct CSW {
 #define MAX_PACKET	CONFIG_MASS_STORAGE_BULK_EP_MPS
 
 #define BLOCK_SIZE	512
+#define WRITE_BUF_BLOCK_COUNT	8U
+#define WRITE_BUF_SIZE		(BLOCK_SIZE * WRITE_BUF_BLOCK_COUNT)
 #define DISK_THREAD_PRIO	-5
 
 BUILD_ASSERT(MAX_PACKET <= BLOCK_SIZE);
+BUILD_ASSERT((WRITE_BUF_SIZE % BLOCK_SIZE) == 0U);
 
 #define THREAD_OP_READ_QUEUED		1
 #define THREAD_OP_WRITE_QUEUED		3
@@ -168,14 +171,16 @@ static struct k_sem disk_wait_sem;
 static volatile uint32_t defered_wr_sz;
 
 /*
- * Keep block buffer larger than BLOCK_SIZE for the case
+ * Keep write staging buffer larger than WRITE_BUF_SIZE for the case
  * the dCBWDataTransferLength is multiple of the BLOCK_SIZE and
  * the length of the transferred data is not aligned to the BLOCK_SIZE.
+ * The larger staging area lets the write path absorb multiple OUT packets
+ * before stalling the endpoint for a disk flush.
  *
  * Align for cases where the underlying disk access requires word-aligned
  * addresses.
  */
-static uint8_t __aligned(4) page[BLOCK_SIZE + CONFIG_MASS_STORAGE_BULK_EP_MPS];
+static uint8_t __aligned(4) page[WRITE_BUF_SIZE + CONFIG_MASS_STORAGE_BULK_EP_MPS];
 
 /* Initialized during mass_storage_init() */
 static uint32_t block_count;
@@ -188,6 +193,7 @@ static void mass_storage_bulk_out(uint8_t ep,
 				  enum usb_dc_ep_cb_status_code ep_status);
 static void mass_storage_bulk_in(uint8_t ep,
 				 enum usb_dc_ep_cb_status_code ep_status);
+static void thread_memory_write_done(bool resume_out_ep);
 
 /* Describe EndPoints configuration */
 static struct usb_ep_cfg_data mass_ep_data[] = {
@@ -724,36 +730,66 @@ static void memoryVerify(uint8_t *buf, uint16_t size)
 	}
 }
 
+static bool msc_disk_access_inline(void)
+{
+	if (!IS_ENABLED(CONFIG_DISK_DRIVER_RAM)) {
+		return false;
+	}
+
+	return strcmp(disk_pdrv, "RAM") == 0;
+}
+
 static void memoryWrite(uint8_t *buf, uint16_t size)
 {
+	uint32_t flush_size = 0U;
+
 	if (curr_lba >= block_count) {
 		LOG_WRN("Attempt to write past end of device: lba=%u", curr_lba);
 		fail();
 		return;
 	}
 
-	/* we fill an array in RAM of 1 block before writing it in memory */
-	for (int i = 0; i < size; i++) {
-		page[curr_offset + i] = buf[i];
+	if ((uint32_t)curr_offset + size > sizeof(page)) {
+		LOG_ERR("Write buffer overflow: off=%u size=%u", curr_offset, size);
+		fail();
+		return;
 	}
 
-	/* if the array is filled, write it in memory */
-	if (curr_offset + size >= BLOCK_SIZE) {
+	memcpy(&page[curr_offset], buf, size);
+	curr_offset += size;
+	length -= size;
+	csw.DataResidue -= size;
+
+	if ((curr_offset >= WRITE_BUF_SIZE) ||
+	    (!length && (curr_offset >= BLOCK_SIZE))) {
+		flush_size = curr_offset - (curr_offset % BLOCK_SIZE);
+	}
+
+	if (flush_size > 0U) {
 		if (!(disk_access_status(disk_pdrv) &
 					DISK_STATUS_WR_PROTECT)) {
-			LOG_DBG("Disk WRITE Qd %u", curr_lba);
+			if (msc_disk_access_inline()) {
+				LOG_DBG("Disk WRITE inline %u (%u bytes)",
+					curr_lba, flush_size);
+				defered_wr_sz = flush_size;
+				if (disk_access_write(disk_pdrv, page, curr_lba,
+					      flush_size / BLOCK_SIZE)) {
+					LOG_ERR("!!!!! Disk Write Error %u (%u bytes) !!!!!",
+						curr_lba, flush_size);
+				}
+				thread_memory_write_done(false);
+				return;
+			}
+
+			LOG_DBG("Disk WRITE Qd %u (%u bytes)", curr_lba, flush_size);
 			thread_op = THREAD_OP_WRITE_QUEUED;  /* write_queued */
-			defered_wr_sz = size;
+			defered_wr_sz = flush_size;
 			k_sem_give(&disk_wait_sem);
 			return;
 		}
 	}
 
-	curr_offset += size;
-	length -= size;
-	csw.DataResidue -= size;
-
-	if ((!length) || (stage != MSC_PROCESS_CBW)) {
+	if ((!length && !curr_offset) || (stage != MSC_PROCESS_CBW)) {
 		csw.Status = (stage == MSC_ERROR) ? CSW_FAILED : CSW_PASSED;
 		sendCSW();
 	}
@@ -813,38 +849,34 @@ static void mass_storage_bulk_out(uint8_t ep,
 
 }
 
-static void thread_memory_write_done(void)
+static void thread_memory_write_done(bool resume_out_ep)
 {
 	uint32_t size = defered_wr_sz;
-	size_t overflowed_len = (curr_offset + size) - BLOCK_SIZE;
-
-	if (BLOCK_SIZE > (curr_offset + size)) {
-		overflowed_len = 0;
-	}
+	size_t overflowed_len = curr_offset - size;
 
 	if (overflowed_len > 0) {
-		memmove(page, &page[BLOCK_SIZE], overflowed_len);
+		memmove(page, &page[size], overflowed_len);
 	}
 
 	curr_offset = overflowed_len;
-	curr_lba += 1;
-	length -= size;
-	csw.DataResidue -= size;
+	curr_lba += size / BLOCK_SIZE;
 
-	if (!length) {
+	if (!length && !curr_offset) {
 		if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_CTRL_SYNC, NULL)) {
 			LOG_ERR("!! Disk cache sync error !!");
 		}
 	}
 
-	if ((!length) || (stage != MSC_PROCESS_CBW)) {
+	if ((!length && !curr_offset) || (stage != MSC_PROCESS_CBW)) {
 		csw.Status = (stage == MSC_ERROR) ? CSW_FAILED : CSW_PASSED;
 		sendCSW();
 	}
 
 	thread_op = THREAD_OP_WRITE_DONE;
 
-	usb_ep_read_continue(mass_ep_data[MSD_OUT_EP_IDX].ep_addr);
+	if (resume_out_ep) {
+		usb_ep_read_continue(mass_ep_data[MSD_OUT_EP_IDX].ep_addr);
+	}
 }
 
 /**
@@ -994,11 +1026,12 @@ static void mass_thread_main(void *p1, void *p2, void *p3)
 			break;
 		case THREAD_OP_WRITE_QUEUED:
 			if (disk_access_write(disk_pdrv,
-						page, curr_lba, 1)) {
-				LOG_ERR("!!!!! Disk Write Error %u !!!!!",
-					curr_lba);
+						page, curr_lba,
+						defered_wr_sz / BLOCK_SIZE)) {
+				LOG_ERR("!!!!! Disk Write Error %u (%u bytes) !!!!!",
+					curr_lba, defered_wr_sz);
 			}
-			thread_memory_write_done();
+				thread_memory_write_done(true);
 			break;
 		default:
 			LOG_ERR("XXXXXX thread_op  %d ! XXXXX", thread_op);
