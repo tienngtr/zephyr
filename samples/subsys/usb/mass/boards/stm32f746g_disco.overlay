@@ -1,3 +1,14 @@
+/ {
+	ramdisk0 {
+		compatible = "zephyr,ram-disk";
+		disk-name = "RAM";
+		sector-size = <512>;
+		/* STM32F746G-DISCO exposes 8 MiB of usable SDRAM with this FMC setup. */
+		sector-count = <16384>;
+		ram-region = <&sdram1>;
+	};
+};
+
 &ltdc {
 	status = "disabled";
 };
