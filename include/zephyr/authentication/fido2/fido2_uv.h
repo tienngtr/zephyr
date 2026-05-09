@@ -9,13 +9,13 @@
  * @brief FIDO2 user verification abstraction API.
  */
 
-#ifndef ZEPHYR_INCLUDE_FIDO2_FIDO2_UV_H_
-#define ZEPHYR_INCLUDE_FIDO2_FIDO2_UV_H_
+#ifndef ZEPHYR_INCLUDE_AUTHENTICATION_FIDO2_FIDO2_UV_H_
+#define ZEPHYR_INCLUDE_AUTHENTICATION_FIDO2_FIDO2_UV_H_
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/iterable_sections.h>
+#include <zephyr/authentication/fido2/fido2_types.h>
 #include <stdbool.h>
-#include <zephyr/fido2/fido2_types.h>
 
 /**
  * @brief FIDO2 user verification
@@ -103,4 +103,4 @@ bool fido2_uv_is_configured(void);
 
 /** @} */
 
-#endif /* ZEPHYR_INCLUDE_FIDO2_FIDO2_UV_H_ */
+#endif /* ZEPHYR_INCLUDE_AUTHENTICATION_FIDO2_FIDO2_UV_H_ */
