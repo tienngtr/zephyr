@@ -15,13 +15,6 @@
 
 LOG_MODULE_DECLARE(fido2, CONFIG_FIDO2_LOG_LEVEL);
 
-/* Max number of retries for key generation */
-#define FIDO2_KEYGEN_ID_RETRIES  16
-/* Key size for ES256 */
-#define FIDO2_ES256_KEY_BITS     256
-/* r||s, 32 bytes each for P-256 */
-#define FIDO2_ES256_RAW_SIG_SIZE 64
-
 int fido2_crypto_init(void)
 {
 	psa_status_t status;

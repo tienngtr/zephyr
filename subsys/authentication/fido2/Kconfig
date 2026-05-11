@@ -106,6 +106,7 @@ config FIDO2_ALWAYS_UV
 
 	  This overrides makeCredUvNotRqd
 
+rsource "attestation/Kconfig"
 rsource "transport/Kconfig"
 rsource "uv/Kconfig"
 rsource "storage/Kconfig"
