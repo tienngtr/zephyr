@@ -1,0 +1,35 @@
+/*
+ * Copyright (c) 2026 Siratul Islam <email@sirat.me>
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/ {
+	chosen {
+		zephyr,fido2-hid = &fido2_hid;
+		zephyr,settings-partition = &storage_partition;
+	};
+
+	fido2_hid: fido2_hid {
+		compatible = "zephyr,hid-device";
+		label = "FIDO2 HID";
+		protocol-code = "none";
+		in-report-size = <64>;
+		out-report-size = <64>;
+		in-polling-period-us = <1000>;
+		out-polling-period-us = <1000>;
+	};
+};
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		storage_partition: partition@e0000 {
+			label = "storage";
+			reg = <0x000e0000 0x00020000>;
+		};
+	};
+};

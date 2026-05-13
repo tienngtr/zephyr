@@ -1,0 +1,100 @@
+.. zephyr:code-sample:: usb-fido2
+   :name: USB FIDO2 authenticator
+   :relevant-api: fido2
+
+   Demonstrate the work-in-progress FIDO2 authenticator subsystem over USB HID.
+
+Overview
+********
+
+This sample initializes the FIDO2 authenticator subsystem and exposes the
+CTAPHID transport as a USB HID interface. It is intended for exercising the
+work-in-progress implementation in :zephyr_file:`include/zephyr/authentication/fido2`
+and :zephyr_file:`subsys/authentication/fido2`.
+
+The current subsystem can enumerate as a FIDO2 HID device and handle
+``authenticatorGetInfo``, ``authenticatorMakeCredential``, and
+``authenticatorGetAssertion``. This sample uses volatile credential storage, so
+credentials are lost when the board resets.
+
+Building and Running
+********************
+
+Build for the STM32F4 Discovery board:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/subsys/usb/fido2
+   :board: stm32f4_disco
+   :goals: build
+   :compact:
+
+Flash with OpenOCD:
+
+.. code-block:: console
+
+   west flash --runner openocd
+
+Monitor the board UART at 115200 baud. For example:
+
+.. code-block:: console
+
+   picocom -b 115200 /dev/ttyUSB2
+
+Testing with libfido2
+*********************
+
+The examples below use the ``fido2-token``, ``fido2-cred``, and
+``fido2-assert`` command line tools from libfido2. After flashing the sample,
+find the HID device node:
+
+.. code-block:: console
+
+   fido2-token -L
+
+The token should appear as a Zephyr FIDO2 sample device, for example:
+
+.. code-block:: none
+
+   /dev/hidraw2: vendor=0x2fe3, product=0x0012 (Zephyr Project Zephyr FIDO2 Sample)
+
+Set a shell variable for the device path shown on your host:
+
+.. code-block:: console
+
+   export FIDO2_DEV=/dev/hidraw2
+
+Probe the token:
+
+.. code-block:: console
+
+   fido2-token -I ${FIDO2_DEV}
+
+Create a credential. The input file contains a 32-byte client data hash, relying
+party ID, user name, and 32-byte user ID:
+
+.. code-block:: console
+
+   printf '%s\n%s\n%s\n%s\n' \
+     AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+     zephyr.example \
+     zephyr-user \
+     AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA= > cred_param
+
+   fido2-cred -M -q -i cred_param ${FIDO2_DEV} es256 > cred_att
+   fido2-cred -V -i cred_att -o cred_key es256
+
+Get and verify an assertion using the credential ID returned by
+``fido2-cred -V``:
+
+.. code-block:: console
+
+   printf '%s\n%s\n' \
+     AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+     zephyr.example > assert_param
+   head -1 cred_key >> assert_param
+
+   fido2-assert -G -p -i assert_param ${FIDO2_DEV} > assert
+   fido2-assert -V -p -i assert cred_key es256
+
+All commands should exit with status 0. Because credentials are stored in RAM for
+this sample, run the assertion test before resetting or power-cycling the board.

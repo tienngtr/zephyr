@@ -59,3 +59,62 @@ int fido2_storage_find_by_rp(const uint8_t rp_id_hash[FIDO2_SHA256_SIZE],
 {
 	return fido2_storage_backend.find_by_rp(rp_id_hash, creds, max_creds, count);
 }
+
+int fido2_storage_enumerate_rps(size_t offset, struct fido2_credential *creds, size_t max_creds,
+				size_t *count)
+{
+	return fido2_storage_backend.enumerate_rps(offset, creds, max_creds, count);
+}
+
+int fido2_storage_iterate(fido2_storage_iterate_cb_t cb, void *user_data)
+{
+	return fido2_storage_backend.iterate(cb, user_data);
+}
+
+int fido2_storage_sign_count_increment(const uint8_t *cred_id, size_t cred_id_len,
+				       uint32_t *new_count)
+{
+	return fido2_storage_backend.sign_count_increment(cred_id, cred_id_len, new_count);
+}
+
+int fido2_storage_update_user_info(const uint8_t *cred_id, size_t cred_id_len,
+				   const char *user_name, const char *user_display_name)
+{
+	return fido2_storage_backend.update_user_info(cred_id, cred_id_len, user_name,
+						     user_display_name);
+}
+
+int fido2_storage_credential_count(size_t *count)
+{
+	return fido2_storage_backend.credential_count(count);
+}
+
+int fido2_storage_wipe_all(void)
+{
+	return fido2_storage_backend.wipe_all();
+}
+
+int fido2_storage_pin_set(const uint8_t pin_hash[FIDO2_PIN_HASH_SIZE])
+{
+	return fido2_storage_backend.pin_set(pin_hash);
+}
+
+int fido2_storage_pin_get(uint8_t pin_hash[FIDO2_PIN_HASH_SIZE])
+{
+	return fido2_storage_backend.pin_get(pin_hash);
+}
+
+int fido2_storage_pin_retries_get(uint8_t *retries)
+{
+	return fido2_storage_backend.pin_retries_get(retries);
+}
+
+int fido2_storage_pin_retries_decrement(void)
+{
+	return fido2_storage_backend.pin_retries_decrement();
+}
+
+int fido2_storage_pin_retries_reset(void)
+{
+	return fido2_storage_backend.pin_retries_reset();
+}

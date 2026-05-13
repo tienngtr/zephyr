@@ -34,15 +34,19 @@ int fido2_crypto_generate_keypair(uint32_t *key_id)
 
 	for (int i = 0; i < FIDO2_KEYGEN_ID_RETRIES; ++i) {
 		psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
+#if !defined(CONFIG_FIDO2_STORAGE_NONE)
 		psa_key_id_t candidate = ZEPHYR_PSA_FIDO2_KEY_ID_RANGE_BEGIN +
 					 sys_rand32_get() % ZEPHYR_PSA_FIDO2_KEY_ID_RANGE_SIZE;
+#endif
 
 		psa_set_key_usage_flags(&attr, PSA_KEY_USAGE_SIGN_HASH);
 		psa_set_key_algorithm(&attr, PSA_ALG_ECDSA(PSA_ALG_SHA_256));
 		psa_set_key_bits(&attr, FIDO2_ES256_KEY_BITS);
 		psa_set_key_type(&attr, PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1));
+#if !defined(CONFIG_FIDO2_STORAGE_NONE)
 		psa_set_key_lifetime(&attr, PSA_KEY_LIFETIME_PERSISTENT);
 		psa_set_key_id(&attr, candidate);
+#endif
 
 		status = psa_generate_key(&attr, &id);
 		psa_reset_key_attributes(&attr);

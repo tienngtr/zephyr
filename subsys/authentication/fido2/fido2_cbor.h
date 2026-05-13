@@ -107,6 +107,40 @@ struct fido2_make_credential_params {
 };
 
 /**
+ * Decoded authenticatorGetAssertion request parameters.
+ */
+struct fido2_get_assertion_params {
+	/** 0x01: rpId */
+	char rp_id[FIDO2_RP_ID_MAX_LEN];
+	/** 0x02: clientDataHash */
+	uint8_t client_data_hash[FIDO2_SHA256_SIZE];
+	/** 0x03: allowList credential IDs */
+	uint8_t allow_ids[FIDO2_MAX_ALLOW_LIST][FIDO2_CREDENTIAL_ID_MAX_SIZE];
+	/** allowList credential ID lengths */
+	size_t allow_id_lens[FIDO2_MAX_ALLOW_LIST];
+	/** Number of allow list entries */
+	uint8_t num_allow;
+	/** 0x05: options.up */
+	bool up;
+	/** Whether options.up was present */
+	bool has_up_option;
+	/** 0x05: options.uv */
+	bool uv;
+	/** Whether options.uv was present */
+	bool has_uv_option;
+	/** 0x06: pinUvAuthParam */
+	uint8_t pin_uv_auth_param[FIDO2_CBOR_PIN_AUTH_MAX_SIZE];
+	/** Length of pinUvAuthParam */
+	size_t pin_uv_auth_param_len;
+	/** Whether pinUvAuthParam key was present */
+	bool has_pin_uv_auth_param;
+	/** 0x07: pinUvAuthProtocol version */
+	uint8_t pin_uv_auth_protocol;
+	/** Whether pinUvAuthProtocol key was present */
+	bool has_pin_uv_auth_protocol;
+};
+
+/**
  * Encode authenticatorGetInfo response.
  *
  * @param info         Device info to encode
@@ -144,6 +178,35 @@ int fido2_cbor_encode_make_credential_resp(const uint8_t *auth_data, size_t auth
 					   const struct fido2_attestation_result *att,
 					   uint8_t *cbor_out, size_t cbor_out_cap,
 					   size_t *cbor_out_len);
+
+/**
+ * Decode authenticatorGetAssertion request.
+ *
+ * @param cbor_in CBOR-encoded request
+ * @param cbor_in_len Length of request data
+ * @param params Output: decoded parameters
+ * @return 0 on success, negative errno on failure
+ */
+int fido2_cbor_decode_get_assertion(const uint8_t *cbor_in, size_t cbor_in_len,
+				    struct fido2_get_assertion_params *params);
+
+/**
+ * Encode authenticatorGetAssertion response.
+ *
+ * @param cred Credential used for the assertion
+ * @param auth_data Raw authenticatorData bytes
+ * @param auth_data_len Length of authenticatorData
+ * @param sig DER-encoded assertion signature
+ * @param sig_len Length of @p sig
+ * @param cbor_out Output buffer
+ * @param cbor_out_cap Capacity of @p cbor_out in bytes
+ * @param cbor_out_len Number of bytes written to @p cbor_out
+ * @return 0 on success, negative errno on failure
+ */
+int fido2_cbor_encode_get_assertion_resp(const struct fido2_credential *cred,
+					 const uint8_t *auth_data, size_t auth_data_len,
+					 const uint8_t *sig, size_t sig_len, uint8_t *cbor_out,
+					 size_t cbor_out_cap, size_t *cbor_out_len);
 
 /**
  * Encode a COSE_Key for ES256 (P-256) public key.
