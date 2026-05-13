@@ -14,8 +14,9 @@ and :zephyr_file:`subsys/authentication/fido2`.
 
 The current subsystem can enumerate as a FIDO2 HID device and handle
 ``authenticatorGetInfo``, ``authenticatorMakeCredential``, and
-``authenticatorGetAssertion``. This sample uses volatile credential storage, so
-credentials are lost when the board resets.
+``authenticatorGetAssertion``/``authenticatorGetNextAssertion``. This sample
+uses volatile credential storage. Credentials can be resident/discoverable while
+the board is running, but they are lost when the board resets.
 
 Building and Running
 ********************
@@ -98,3 +99,38 @@ Get and verify an assertion using the credential ID returned by
 
 All commands should exit with status 0. Because credentials are stored in RAM for
 this sample, run the assertion test before resetting or power-cycling the board.
+
+Resident Credential Test
+========================
+
+Create two resident credentials for the same relying party:
+
+.. code-block:: console
+
+   printf '%s\n%s\n%s\n%s\n' \
+     AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+     zephyr.example \
+     alice \
+     AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA= > cred_alice
+
+   printf '%s\n%s\n%s\n%s\n' \
+     AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+     zephyr.example \
+     bob \
+     AgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICE= > cred_bob
+
+   fido2-cred -M -r -q -i cred_alice ${FIDO2_DEV} es256 > cred_alice_att
+   fido2-cred -M -r -q -i cred_bob ${FIDO2_DEV} es256 > cred_bob_att
+
+Request an assertion without an allow list:
+
+.. code-block:: console
+
+   printf '%s\n%s\n' \
+     AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+     zephyr.example > assert_resident_param
+
+   fido2-assert -G -p -r -i assert_resident_param ${FIDO2_DEV} > assert_resident
+
+The output should contain two assertion records. This exercises
+``authenticatorGetAssertion`` followed by ``authenticatorGetNextAssertion``.

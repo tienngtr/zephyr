@@ -46,6 +46,13 @@ static struct fido2_make_credential_params mc_params;
 static struct fido2_get_assertion_params ga_params;
 static struct fido2_credential mc_credential;
 static struct fido2_credential ga_credentials[CONFIG_FIDO2_MAX_CREDENTIALS];
+static struct {
+	bool active;
+	size_t next_index;
+	size_t count;
+	uint8_t client_data_hash[FIDO2_SHA256_SIZE];
+	uint8_t flags;
+} ga_next;
 
 static uint8_t ctap_tx_frame[CONFIG_FIDO2_CBOR_MAX_SIZE];
 
@@ -145,6 +152,70 @@ static int ga_build_auth_data(const uint8_t rp_id_hash[FIDO2_SHA256_SIZE], uint3
 	*auth_data_len = offset;
 
 	return 0;
+}
+
+static enum fido2_status ga_encode_credential_assertion(const struct fido2_credential *credential,
+							const uint8_t client_data_hash[FIDO2_SHA256_SIZE],
+							uint8_t flags, bool include_user,
+							size_t num_credentials,
+							uint8_t *cbor_out, size_t cbor_out_cap,
+							size_t *cbor_out_len)
+{
+	uint8_t auth_data[FIDO2_AUTH_DATA_HEADER_SIZE];
+	uint8_t signed_hash[FIDO2_SHA256_SIZE];
+	uint8_t sig[80];
+	size_t auth_data_len;
+	size_t sig_len;
+	uint32_t sign_count;
+	int ret;
+
+	ret = fido2_storage_sign_count_increment(credential->id, credential->id_len, &sign_count);
+	if (ret) {
+		return FIDO2_ERR_OTHER;
+	}
+
+	ret = ga_build_auth_data(credential->rp_id_hash, sign_count, flags, auth_data,
+				 sizeof(auth_data), &auth_data_len);
+	if (ret) {
+		return FIDO2_ERR_OTHER;
+	}
+
+	ret = fido2_crypto_hash_authdata(auth_data, auth_data_len, client_data_hash, signed_hash);
+	if (ret) {
+		return FIDO2_ERR_OTHER;
+	}
+
+	ret = fido2_crypto_sign(credential->key_id, signed_hash, sig, sizeof(sig), &sig_len);
+	if (ret) {
+		return FIDO2_ERR_OTHER;
+	}
+
+	ret = fido2_cbor_encode_get_assertion_resp(credential, auth_data, auth_data_len, sig,
+						   sig_len, include_user, num_credentials,
+						   cbor_out, cbor_out_cap, cbor_out_len);
+	if (ret) {
+		return FIDO2_ERR_OTHER;
+	}
+
+	return FIDO2_OK;
+}
+
+static size_t ga_filter_discoverable_credentials(size_t count)
+{
+	size_t out = 0;
+
+	for (size_t i = 0; i < count && i < ARRAY_SIZE(ga_credentials); ++i) {
+		if (!ga_credentials[i].discoverable) {
+			continue;
+		}
+
+		if (out != i) {
+			memcpy(&ga_credentials[out], &ga_credentials[i], sizeof(ga_credentials[out]));
+		}
+		out++;
+	}
+
+	return out;
 }
 
 static int mc_build_auth_data(const uint8_t rp_id_hash[FIDO2_SHA256_SIZE], const uint8_t *cred_id,
@@ -328,14 +399,11 @@ static enum fido2_status handle_get_assertion(uint8_t *cbor_in, size_t cbor_in_l
 {
 	struct fido2_credential credential = {0};
 	uint8_t rp_id_hash[FIDO2_SHA256_SIZE];
-	uint8_t auth_data[FIDO2_AUTH_DATA_HEADER_SIZE];
-	uint8_t sig[80];
-	uint8_t signed_hash[FIDO2_SHA256_SIZE];
-	size_t auth_data_len;
-	size_t sig_len;
-	uint32_t sign_count;
+	size_t count = 0;
 	uint8_t flags;
 	int ret;
+
+	ga_next.active = false;
 
 	ret = fido2_cbor_decode_get_assertion(cbor_in, cbor_in_len, &ga_params);
 	if (ret) {
@@ -369,10 +437,13 @@ static enum fido2_status handle_get_assertion(uint8_t *cbor_in, size_t cbor_in_l
 			return FIDO2_ERR_NO_CREDENTIALS;
 		}
 	} else {
-		size_t count = 0;
-
-		ret = fido2_storage_find_by_rp(rp_id_hash, ga_credentials, 1, &count);
+		ret = fido2_storage_find_by_rp(rp_id_hash, ga_credentials,
+					       ARRAY_SIZE(ga_credentials), &count);
 		if (ret || count == 0) {
+			return FIDO2_ERR_NO_CREDENTIALS;
+		}
+		count = ga_filter_discoverable_credentials(count);
+		if (count == 0) {
 			return FIDO2_ERR_NO_CREDENTIALS;
 		}
 		memcpy(&credential, &ga_credentials[0], sizeof(credential));
@@ -384,36 +455,54 @@ static enum fido2_status handle_get_assertion(uint8_t *cbor_in, size_t cbor_in_l
 
 	flags = ga_params.up ? AUTH_DATA_FLAG_UP : 0;
 
-	ret = fido2_storage_sign_count_increment(credential.id, credential.id_len, &sign_count);
-	if (ret) {
-		return FIDO2_ERR_OTHER;
+	if (ga_params.num_allow == 0 && count > 1) {
+		memcpy(ga_next.client_data_hash, ga_params.client_data_hash,
+		       sizeof(ga_next.client_data_hash));
+		ga_next.flags = flags;
+		ga_next.count = count;
+		ga_next.next_index = 1;
+		ga_next.active = true;
 	}
 
-	ret = ga_build_auth_data(credential.rp_id_hash, sign_count, flags, auth_data,
-				 sizeof(auth_data), &auth_data_len);
-	if (ret) {
-		return FIDO2_ERR_OTHER;
+	ret = ga_encode_credential_assertion(&credential, ga_params.client_data_hash, flags,
+					     ga_params.num_allow == 0, count, cbor_out,
+					     cbor_out_cap, cbor_out_len);
+	if (ret != FIDO2_OK) {
+		ga_next.active = false;
+		return ret;
 	}
 
-	ret = fido2_crypto_hash_authdata(auth_data, auth_data_len, ga_params.client_data_hash,
-					 signed_hash);
-	if (ret) {
-		return FIDO2_ERR_OTHER;
+	LOG_INF("GetAssertion succeeded for RP: %s (%zu credential%s)", ga_params.rp_id,
+		count > 0 ? count : 1, count == 1 ? "" : "s");
+
+	return FIDO2_OK;
+}
+
+static enum fido2_status handle_get_next_assertion(uint8_t *cbor_out, size_t cbor_out_cap,
+						   size_t *cbor_out_len)
+{
+	const struct fido2_credential *credential;
+	enum fido2_status status;
+
+	if (!ga_next.active || ga_next.next_index >= ga_next.count) {
+		ga_next.active = false;
+		return FIDO2_ERR_NOT_ALLOWED;
 	}
 
-	ret = fido2_crypto_sign(credential.key_id, signed_hash, sig, sizeof(sig), &sig_len);
-	if (ret) {
-		return FIDO2_ERR_OTHER;
+	credential = &ga_credentials[ga_next.next_index++];
+	if (ga_next.next_index >= ga_next.count) {
+		ga_next.active = false;
 	}
 
-	ret = fido2_cbor_encode_get_assertion_resp(&credential, auth_data, auth_data_len, sig,
-						   sig_len, cbor_out, cbor_out_cap,
-						   cbor_out_len);
-	if (ret) {
-		return FIDO2_ERR_OTHER;
+	status = ga_encode_credential_assertion(credential, ga_next.client_data_hash,
+					       ga_next.flags, true, 0, cbor_out,
+					       cbor_out_cap, cbor_out_len);
+	if (status != FIDO2_OK) {
+		ga_next.active = false;
+		return status;
 	}
 
-	LOG_INF("GetAssertion succeeded for RP: %s", ga_params.rp_id);
+	LOG_INF("GetNextAssertion succeeded (%zu/%zu)", ga_next.next_index, ga_next.count);
 
 	return FIDO2_OK;
 }
@@ -445,7 +534,7 @@ static enum fido2_status handle_get_info(uint8_t *cbor_out, size_t cbor_out_cap,
 		info.transports |= FIDO2_TRANSPORT_NFC;
 	}
 
-	info.options.rk = !IS_ENABLED(CONFIG_FIDO2_STORAGE_NONE);
+	info.options.rk = true;
 	info.options.up = true;
 	info.options.plat = false;
 	/* These will depend on config */
@@ -495,6 +584,10 @@ static enum fido2_status process_command(uint8_t cmd, uint8_t *cbor_in, size_t c
 					 size_t *cbor_out_len,
 					 const struct fido2_transport *transport, uint32_t cid)
 {
+	if (cmd != FIDO2_CMD_GET_NEXT_ASSERTION && cmd != FIDO2_CMD_GET_ASSERTION) {
+		ga_next.active = false;
+	}
+
 	switch (cmd) {
 	case FIDO2_CMD_GET_INFO:
 		return handle_get_info(cbor_out, cbor_out_cap, cbor_out_len);
@@ -504,6 +597,8 @@ static enum fido2_status process_command(uint8_t cmd, uint8_t *cbor_in, size_t c
 	case FIDO2_CMD_GET_ASSERTION:
 		return handle_get_assertion(cbor_in, cbor_in_len, cbor_out, cbor_out_cap,
 					    cbor_out_len);
+	case FIDO2_CMD_GET_NEXT_ASSERTION:
+		return handle_get_next_assertion(cbor_out, cbor_out_cap, cbor_out_len);
 	default:
 		*cbor_out_len = 0;
 		return FIDO2_ERR_INVALID_COMMAND;

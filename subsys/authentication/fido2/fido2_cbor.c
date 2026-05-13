@@ -47,6 +47,7 @@ LOG_MODULE_DECLARE(fido2, CONFIG_FIDO2_LOG_LEVEL);
 #define GET_ASSERTION_RESP_AUTH_DATA  0x02
 #define GET_ASSERTION_RESP_SIGNATURE  0x03
 #define GET_ASSERTION_RESP_USER       0x04
+#define GET_ASSERTION_RESP_NUM_CREDS  0x05
 
 /* authenticatorGetInfo 0x04 */
 #define GETINFO_KEY_VERSIONS                     0x01
@@ -988,12 +989,21 @@ int fido2_cbor_encode_cose_key(const uint8_t *pub_key, size_t pub_key_len, uint8
 
 int fido2_cbor_encode_get_assertion_resp(const struct fido2_credential *cred,
 					 const uint8_t *auth_data, size_t auth_data_len,
-					 const uint8_t *sig, size_t sig_len, uint8_t *cbor_out,
-					 size_t cbor_out_cap, size_t *cbor_out_len)
+					 const uint8_t *sig, size_t sig_len, bool include_user,
+					 size_t num_credentials, uint8_t *cbor_out, size_t cbor_out_cap,
+					 size_t *cbor_out_len)
 {
 	ZCBOR_STATE_E(zs, 5, cbor_out, cbor_out_cap, 1);
+	uint8_t map_count = 3;
 
-	if (!zcbor_map_start_encode(zs, 3)) {
+	if (include_user) {
+		map_count++;
+	}
+	if (num_credentials > 1) {
+		map_count++;
+	}
+
+	if (!zcbor_map_start_encode(zs, map_count)) {
 		return -ENOMEM;
 	}
 
@@ -1022,7 +1032,47 @@ int fido2_cbor_encode_get_assertion_resp(const struct fido2_credential *cred,
 		return -ENOMEM;
 	}
 
-	if (!zcbor_map_end_encode(zs, 3)) {
+	if (include_user) {
+		uint8_t user_map_count = 1;
+
+		if (cred->user_name[0] != '\0') {
+			user_map_count++;
+		}
+		if (cred->user_display_name[0] != '\0') {
+			user_map_count++;
+		}
+
+		if (!zcbor_uint32_put(zs, GET_ASSERTION_RESP_USER) ||
+		    !zcbor_map_start_encode(zs, user_map_count)) {
+			return -ENOMEM;
+		}
+		if (!zcbor_tstr_put_lit(zs, "id") ||
+		    !zcbor_bstr_encode_ptr(zs, cred->user_id, cred->user_id_len)) {
+			return -ENOMEM;
+		}
+		if (cred->user_name[0] != '\0' &&
+		    (!zcbor_tstr_put_lit(zs, "name") ||
+		     !zcbor_tstr_put_term(zs, cred->user_name, sizeof(cred->user_name)))) {
+			return -ENOMEM;
+		}
+		if (cred->user_display_name[0] != '\0' &&
+		    (!zcbor_tstr_put_lit(zs, "displayName") ||
+		     !zcbor_tstr_put_term(zs, cred->user_display_name,
+					  sizeof(cred->user_display_name)))) {
+			return -ENOMEM;
+		}
+		if (!zcbor_map_end_encode(zs, user_map_count)) {
+			return -ENOMEM;
+		}
+	}
+
+	if (num_credentials > 1 &&
+	    (!zcbor_uint32_put(zs, GET_ASSERTION_RESP_NUM_CREDS) ||
+	     !zcbor_uint32_put(zs, num_credentials))) {
+		return -ENOMEM;
+	}
+
+	if (!zcbor_map_end_encode(zs, map_count)) {
 		return -ENOMEM;
 	}
 

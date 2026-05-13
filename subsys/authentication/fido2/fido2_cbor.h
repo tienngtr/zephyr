@@ -205,8 +205,9 @@ int fido2_cbor_decode_get_assertion(const uint8_t *cbor_in, size_t cbor_in_len,
  */
 int fido2_cbor_encode_get_assertion_resp(const struct fido2_credential *cred,
 					 const uint8_t *auth_data, size_t auth_data_len,
-					 const uint8_t *sig, size_t sig_len, uint8_t *cbor_out,
-					 size_t cbor_out_cap, size_t *cbor_out_len);
+					 const uint8_t *sig, size_t sig_len, bool include_user,
+					 size_t num_credentials, uint8_t *cbor_out, size_t cbor_out_cap,
+					 size_t *cbor_out_len);
 
 /**
  * Encode a COSE_Key for ES256 (P-256) public key.
