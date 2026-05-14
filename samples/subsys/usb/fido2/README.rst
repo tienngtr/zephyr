@@ -16,9 +16,10 @@ The current subsystem can enumerate as a FIDO2 HID device and handle
 ``authenticatorGetInfo``, ``authenticatorMakeCredential``, and
 ``authenticatorGetAssertion``/``authenticatorGetNextAssertion``. This sample
 stores credentials in the Zephyr settings subsystem and stores credential keys
-as persistent PSA keys, so credentials survive a board reset. On
-``stm32f4_disco`` the sample uses the ZMS settings backend in the last two
-128 KiB flash sectors.
+as persistent PSA keys, so credentials survive a board reset. The sample uses
+the ZMS settings backend. On ``stm32f4_disco`` storage is placed in the last two
+128 KiB internal flash sectors. On ``stm32f746g_disco`` storage uses the
+board-provided QSPI NOR ``storage_partition``.
 
 Building and Running
 ********************
@@ -28,6 +29,14 @@ Build for the STM32F4 Discovery board:
 .. zephyr-app-commands::
    :zephyr-app: samples/subsys/usb/fido2
    :board: stm32f4_disco
+   :goals: build
+   :compact:
+
+The sample also builds for the STM32F746G Discovery board:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/subsys/usb/fido2
+   :board: stm32f746g_disco
    :goals: build
    :compact:
 

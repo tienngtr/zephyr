@@ -7,6 +7,7 @@
 / {
 	chosen {
 		zephyr,fido2-hid = &fido2_hid;
+		zephyr,settings-partition = &storage_partition;
 	};
 
 	fido2_hid: fido2_hid {

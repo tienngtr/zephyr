@@ -15,5 +15,6 @@ common:
       - "FIDO2 USB HID sample is ready"
   integration_platforms:
     - stm32f4_disco
+    - stm32f746g_disco
 tests:
   sample.usbd.fido2: {}
