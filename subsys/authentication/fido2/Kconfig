@@ -108,6 +108,16 @@ config FIDO2_ALWAYS_UV
 
 	  This overrides makeCredUvNotRqd
 
+config FIDO2_TEST_USER_VERIFICATION
+	bool "Test-only user verification"
+	default n
+	help
+	  Treat every user verification request as successful and advertise
+	  built-in UV support.
+
+	  This is intended only for samples and interoperability testing. It does
+	  not verify a real user and must not be enabled in production.
+
 rsource "attestation/Kconfig"
 rsource "transport/Kconfig"
 rsource "uv/Kconfig"
