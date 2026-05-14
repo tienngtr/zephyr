@@ -16,12 +16,26 @@ static int destroy_credential_key(uint32_t key_id)
 	psa_status_t status;
 
 	status = psa_destroy_key(key_id);
+	if (status == PSA_SUCCESS || status == PSA_ERROR_DOES_NOT_EXIST ||
+	    status == PSA_ERROR_INVALID_HANDLE) {
+		return 0;
+	}
+
 	if (status != PSA_SUCCESS) {
 		LOG_ERR("Failed to destroy credential key 0x%08x: %d", (unsigned int)key_id,
 			status);
 	}
 
 	return status;
+}
+
+static int destroy_stored_credential_key(const struct fido2_credential *cred, void *user_data)
+{
+	ARG_UNUSED(user_data);
+
+	(void)destroy_credential_key(cred->key_id);
+
+	return 0;
 }
 
 int fido2_storage_init(void)
@@ -91,6 +105,8 @@ int fido2_storage_credential_count(size_t *count)
 
 int fido2_storage_wipe_all(void)
 {
+	(void)fido2_storage_iterate(destroy_stored_credential_key, NULL);
+
 	return fido2_storage_backend.wipe_all();
 }
 

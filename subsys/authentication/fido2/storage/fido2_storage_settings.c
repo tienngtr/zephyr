@@ -68,6 +68,15 @@ static int settings_backend_init(void)
 static int settings_backend_store(const struct fido2_credential *cred)
 {
 	struct fido2_credential temp;
+	int idx;
+
+	idx = cred_slot_get(cred->id, cred->id_len, NULL);
+	if (idx >= 0) {
+		char key[FIDO2_SETTINGS_KEY_MAX];
+
+		build_key(key, sizeof(key), idx);
+		return settings_save_one(key, cred, sizeof(*cred));
+	}
 
 	for (int i = 0; i < CONFIG_FIDO2_MAX_CREDENTIALS; ++i) {
 		char key[FIDO2_SETTINGS_KEY_MAX];

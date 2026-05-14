@@ -15,8 +15,10 @@ and :zephyr_file:`subsys/authentication/fido2`.
 The current subsystem can enumerate as a FIDO2 HID device and handle
 ``authenticatorGetInfo``, ``authenticatorMakeCredential``, and
 ``authenticatorGetAssertion``/``authenticatorGetNextAssertion``. This sample
-uses volatile credential storage. Credentials can be resident/discoverable while
-the board is running, but they are lost when the board resets.
+stores credentials in the Zephyr settings subsystem and stores credential keys
+as persistent PSA keys, so credentials survive a board reset. On
+``stm32f4_disco`` the sample uses the ZMS settings backend in the last two
+128 KiB flash sectors.
 
 Building and Running
 ********************
@@ -97,8 +99,9 @@ Get and verify an assertion using the credential ID returned by
    fido2-assert -G -p -i assert_param ${FIDO2_DEV} > assert
    fido2-assert -V -p -i assert cred_key es256
 
-All commands should exit with status 0. Because credentials are stored in RAM for
-this sample, run the assertion test before resetting or power-cycling the board.
+All commands should exit with status 0. Credentials and keys are stored in
+non-volatile storage, so the assertion test can still be run after resetting or
+power-cycling the board.
 
 Resident Credential Test
 ========================
