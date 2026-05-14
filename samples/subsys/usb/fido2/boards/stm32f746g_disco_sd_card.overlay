@@ -1,0 +1,16 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/ {
+	fstab {
+		compatible = "zephyr,fstab";
+
+		fido2_sd_card: fido2_sd_card {
+			compatible = "zephyr,fstab,fatfs";
+			automount;
+			disk-access;
+			mount-point = "/SD:";
+		};
+	};
+};

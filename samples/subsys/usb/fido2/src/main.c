@@ -5,9 +5,23 @@
  */
 
 #include <zephyr/authentication/fido2/fido2.h>
+#include <zephyr/fs/fs.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/usb/usb_device.h>
+
+#if defined(CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD)
+#include <ff.h>
+
+#define FIDO2_SD_MOUNT_POINT "/SD:"
+
+static FATFS fido2_sd_fs;
+static struct fs_mount_t fido2_sd_mount = {
+	.type = FS_FATFS,
+	.mnt_point = FIDO2_SD_MOUNT_POINT,
+	.fs_data = &fido2_sd_fs,
+};
+#endif /* CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD */
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -27,9 +41,33 @@ static void status_cb(enum usb_dc_status_code status, const uint8_t *param)
 	}
 }
 
+#if defined(CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD)
+static int fido2_mount_sd_card(void)
+{
+	int ret;
+
+	ret = fs_mount(&fido2_sd_mount);
+	if (ret) {
+		LOG_ERR("Failed to mount FIDO2 SD card storage at %s: %d",
+			FIDO2_SD_MOUNT_POINT, ret);
+		return ret;
+	}
+
+	LOG_INF("FIDO2 SD card storage mounted at %s", FIDO2_SD_MOUNT_POINT);
+	return 0;
+}
+#endif /* CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD */
+
 int main(void)
 {
 	int ret;
+
+#if defined(CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD)
+	ret = fido2_mount_sd_card();
+	if (ret) {
+		return ret;
+	}
+#endif /* CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD */
 
 	ret = fido2_init();
 	if (ret) {
