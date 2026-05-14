@@ -50,26 +50,38 @@ struct usb_hid_config {
 } __packed;
 
 #if defined(CONFIG_USB_HID_BOOT_PROTOCOL)
+#ifdef CONFIG_ENABLE_HID_INT_OUT_EP
+#define HID_NUM_ENDPOINTS 2
+#else
+#define HID_NUM_ENDPOINTS 1
+#endif
+
 #define INITIALIZER_IF							\
 	{								\
 		.bLength = sizeof(struct usb_if_descriptor),		\
 		.bDescriptorType = USB_DESC_INTERFACE,			\
 		.bInterfaceNumber = 0,					\
 		.bAlternateSetting = 0,					\
-		.bNumEndpoints = 1,					\
+		.bNumEndpoints = HID_NUM_ENDPOINTS,			\
 		.bInterfaceClass = USB_BCC_HID,				\
 		.bInterfaceSubClass = 1,				\
 		.bInterfaceProtocol = 0,				\
 		.iInterface = 0,					\
 	}
 #else
+#ifdef CONFIG_ENABLE_HID_INT_OUT_EP
+#define HID_NUM_ENDPOINTS 2
+#else
+#define HID_NUM_ENDPOINTS 1
+#endif
+
 #define INITIALIZER_IF							\
 	{								\
 		.bLength = sizeof(struct usb_if_descriptor),		\
 		.bDescriptorType = USB_DESC_INTERFACE,			\
 		.bInterfaceNumber = 0,					\
 		.bAlternateSetting = 0,					\
-		.bNumEndpoints = 1,					\
+		.bNumEndpoints = HID_NUM_ENDPOINTS,			\
 		.bInterfaceClass = USB_BCC_HID,				\
 		.bInterfaceSubClass = 0,				\
 		.bInterfaceProtocol = 0,				\

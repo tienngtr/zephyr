@@ -13,6 +13,7 @@ add_compile_options($<TARGET_PROPERTY:compiler,warning_shadow_variables>)
 
 # zephyr-keep-sorted-start
 add_subdirectory(canbus)
+add_subdirectory_ifdef(CONFIG_FIDO2 authentication/fido2)
 add_subdirectory(debug)
 add_subdirectory(fb)
 add_subdirectory(fs)

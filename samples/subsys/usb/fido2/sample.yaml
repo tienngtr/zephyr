@@ -1,0 +1,20 @@
+sample:
+  name: USB FIDO2 authenticator sample
+common:
+  depends_on:
+    - usbd
+  tags:
+    - usb
+    - fido2
+    - authentication
+  timeout: 15
+  harness: console
+  harness_config:
+    type: one_line
+    regex:
+      - "FIDO2 USB HID sample is ready"
+  integration_platforms:
+    - stm32f4_disco
+    - stm32f746g_disco
+tests:
+  sample.usbd.fido2: {}
