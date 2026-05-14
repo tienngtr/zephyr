@@ -61,6 +61,20 @@ static atomic_t fido2_running;
 
 static int64_t reset_deadline;
 
+static bool uv_is_available(void)
+{
+	return IS_ENABLED(CONFIG_FIDO2_TEST_USER_VERIFICATION);
+}
+
+static enum fido2_status uv_perform(void)
+{
+	if (!uv_is_available()) {
+		return FIDO2_ERR_UNSUPPORTED_OPTION;
+	}
+
+	return FIDO2_OK;
+}
+
 static int mc_populate_credential(void)
 {
 	int ret;
@@ -307,6 +321,14 @@ handle_make_credential(uint8_t *cbor_in, size_t cbor_in_len, uint8_t *cbor_out, 
 		mc_params.uv = false;
 	}
 
+	if (mc_params.uv || IS_ENABLED(CONFIG_FIDO2_ALWAYS_UV)) {
+		ret = uv_perform();
+		if (ret != FIDO2_OK) {
+			return ret;
+		}
+		user_verified = true;
+	}
+
 	/* "Gracefully" reject unsupprted feature */
 	if (mc_params.has_enterprise_attestation) {
 		LOG_WRN("Rejected MakeCredential: enterprise attestation not supported");
@@ -416,8 +438,11 @@ static enum fido2_status handle_get_assertion(uint8_t *cbor_in, size_t cbor_in_l
 		ga_params.uv = false;
 	}
 
-	if (ga_params.uv) {
-		return FIDO2_ERR_UNSUPPORTED_OPTION;
+	if (ga_params.uv || IS_ENABLED(CONFIG_FIDO2_ALWAYS_UV)) {
+		ret = uv_perform();
+		if (ret != FIDO2_OK) {
+			return ret;
+		}
 	}
 
 	ret = fido2_crypto_sha256((const uint8_t *)ga_params.rp_id, strlen(ga_params.rp_id),
@@ -455,6 +480,9 @@ static enum fido2_status handle_get_assertion(uint8_t *cbor_in, size_t cbor_in_l
 	}
 
 	flags = ga_params.up ? AUTH_DATA_FLAG_UP : 0;
+	if (ga_params.uv || IS_ENABLED(CONFIG_FIDO2_ALWAYS_UV)) {
+		flags |= AUTH_DATA_FLAG_UV;
+	}
 
 	if (ga_params.num_allow == 0 && count > 1) {
 		memcpy(ga_next.client_data_hash, ga_params.client_data_hash,
@@ -539,7 +567,7 @@ static enum fido2_status handle_get_info(uint8_t *cbor_out, size_t cbor_out_cap,
 	info.options.up = true;
 	info.options.plat = false;
 	/* These will depend on config */
-	info.options.uv = false;
+	info.options.uv = uv_is_available();
 	/* Allow non-UV non-discoverable credential creation */
 	info.options.make_cred_uv_not_rqd = !IS_ENABLED(CONFIG_FIDO2_ALWAYS_UV);
 	/* Force UV even when RP sets userVerification=discouraged */
