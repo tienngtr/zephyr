@@ -10,6 +10,7 @@
 #include <zephyr/random/random.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/authentication/fido2/fido2.h>
 #include <zephyr/authentication/fido2/fido2_types.h>
 #include <zephyr/authentication/fido2/fido2_storage.h>
 #include <zephyr/authentication/fido2/fido2_transport.h>
@@ -579,6 +580,42 @@ static enum fido2_status handle_get_info(uint8_t *cbor_out, size_t cbor_out_cap,
 	return FIDO2_OK;
 }
 
+static enum fido2_status handle_reset(uint8_t *cbor_in, size_t cbor_in_len,
+				      uint8_t *cbor_out, size_t cbor_out_cap,
+				      size_t *cbor_out_len)
+{
+	int ret;
+
+	ARG_UNUSED(cbor_in);
+	ARG_UNUSED(cbor_out);
+	ARG_UNUSED(cbor_out_cap);
+
+	*cbor_out_len = 0;
+
+	if (cbor_in_len != 0) {
+		return FIDO2_ERR_INVALID_LENGTH;
+	}
+
+	ret = fido2_reset();
+	if (ret == -EACCES) {
+		LOG_WRN("Rejected Reset: outside power-up reset window");
+		return FIDO2_ERR_NOT_ALLOWED;
+	}
+
+	if (ret) {
+		LOG_ERR("Reset failed: %d", ret);
+		return FIDO2_ERR_OTHER;
+	}
+
+	ga_next.active = false;
+	memset(&mc_credential, 0, sizeof(mc_credential));
+	memset(ga_credentials, 0, sizeof(ga_credentials));
+
+	LOG_INF("Reset succeeded; credentials and PIN state wiped");
+
+	return FIDO2_OK;
+}
+
 static enum fido2_status process_command(uint8_t cmd, uint8_t *cbor_in, size_t cbor_in_len,
 					 uint8_t *cbor_out, size_t cbor_out_cap,
 					 size_t *cbor_out_len,
@@ -599,6 +636,8 @@ static enum fido2_status process_command(uint8_t cmd, uint8_t *cbor_in, size_t c
 					    cbor_out_len);
 	case FIDO2_CMD_GET_NEXT_ASSERTION:
 		return handle_get_next_assertion(cbor_out, cbor_out_cap, cbor_out_len);
+	case FIDO2_CMD_RESET:
+		return handle_reset(cbor_in, cbor_in_len, cbor_out, cbor_out_cap, cbor_out_len);
 	default:
 		*cbor_out_len = 0;
 		return FIDO2_ERR_INVALID_COMMAND;

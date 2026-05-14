@@ -123,6 +123,15 @@ so the assertion test can still be run after resetting or power-cycling the
 board. On boards that use the default RAM backend, run the credential creation
 step again after every reset.
 
+Reset the token and delete all token data:
+
+.. code-block:: console
+
+   fido2-token -R ${FIDO2_DEV}
+
+Run the reset command within 10 seconds of board boot. After reset, previously
+created credentials must no longer produce valid assertions.
+
 Storage Configuration
 *********************
 
