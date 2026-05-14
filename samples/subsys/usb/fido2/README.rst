@@ -14,12 +14,21 @@ and :zephyr_file:`subsys/authentication/fido2`.
 
 The current subsystem can enumerate as a FIDO2 HID device and handle
 ``authenticatorGetInfo``, ``authenticatorMakeCredential``, and
-``authenticatorGetAssertion``/``authenticatorGetNextAssertion``. This sample
-stores credentials in the Zephyr settings subsystem and stores credential keys
-as persistent PSA keys, so credentials survive a board reset. The sample uses
-the ZMS settings backend. On ``stm32f4_disco`` storage is placed in the last two
-128 KiB internal flash sectors. On ``stm32f746g_disco`` storage uses the
-board-provided QSPI NOR ``storage_partition``.
+``authenticatorGetAssertion``/``authenticatorGetNextAssertion``.
+
+By default, the sample falls back to the volatile FIDO2 storage backend. This
+lets the application build on boards that do not define a
+``zephyr,settings-partition`` or ``storage_partition``. With the volatile
+backend, credentials and credential keys are stored in RAM and are lost on reset
+or power-cycle.
+
+The ``stm32f4_disco`` and ``stm32f746g_disco`` sample board configurations
+enable persistent storage. They store credentials in the Zephyr settings
+subsystem and store credential keys as persistent PSA keys, so credentials
+survive a board reset. The sample uses the ZMS settings backend for these
+boards. On ``stm32f4_disco`` storage is placed in the last two 128 KiB internal
+flash sectors. On ``stm32f746g_disco`` storage uses the board-provided QSPI NOR
+``storage_partition``.
 
 Building and Running
 ********************
@@ -108,9 +117,34 @@ Get and verify an assertion using the credential ID returned by
    fido2-assert -G -p -i assert_param ${FIDO2_DEV} > assert
    fido2-assert -V -p -i assert cred_key es256
 
-All commands should exit with status 0. Credentials and keys are stored in
-non-volatile storage, so the assertion test can still be run after resetting or
-power-cycling the board.
+All commands should exit with status 0. On ``stm32f4_disco`` and
+``stm32f746g_disco``, credentials and keys are stored in non-volatile storage,
+so the assertion test can still be run after resetting or power-cycling the
+board. On boards that use the default RAM backend, run the credential creation
+step again after every reset.
+
+Storage Configuration
+*********************
+
+The common sample configuration does not require flash storage and selects the
+RAM backend unless a board configuration enables another backend. This is useful
+for boards that expose USB HID but do not have a storage partition available.
+
+To enable persistent credentials for another board, add a board-specific
+``boards/<board>.overlay`` that defines ``zephyr,settings-partition`` and add a
+matching board configuration fragment, such as ``boards/<board>_<soc>.conf`` for
+qualified board targets, that enables:
+
+.. code-block:: none
+
+   CONFIG_FIDO2_STORAGE_SETTINGS=y
+   CONFIG_FLASH=y
+   CONFIG_FLASH_MAP=y
+   CONFIG_ZMS=y
+   CONFIG_SETTINGS=y
+   CONFIG_SETTINGS_ZMS=y
+   CONFIG_SETTINGS_ZMS_FORCE_MOUNT=y
+   CONFIG_SECURE_STORAGE_ITS_STORE_IMPLEMENTATION_SETTINGS=y
 
 Resident Credential Test
 ========================
