@@ -37,8 +37,10 @@ This v3.7 backport stores credential records and exported ES256 private keys in
 settings storage on boards that enable the backend. Boards that use the RAM
 backend lose credentials and credential keys on reset or power-cycle.
 
-The ``stm32f746g_disco`` can alternatively store credentials and credential
-keys in a settings file on the SD card. Insert the card before boot and build
+Boards with a working SD card can alternatively store credentials and credential
+keys in a settings file on the card. Insert the card before boot and enable
+``CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD`` with a settings file path under the
+configured FATFS mount point. For example, ``stm32f746g_disco`` can be built
 with the SD-card configuration fragment and overlay:
 
 .. code-block:: console
@@ -174,13 +176,15 @@ qualified board targets, that enables:
    CONFIG_FCB=y
    CONFIG_SETTINGS_FCB=y
 
-To use a filesystem-backed settings store instead, provide a filesystem mount
-point and select the file settings backend. For example, the
-``stm32f746g_disco`` SD-card option uses FATFS mounted at ``/SD:`` and sets:
+To use a filesystem-backed settings store instead, provide a working SDMMC
+disk-access device, set the FATFS mount point, and select the file settings
+backend. For example, the ``stm32f746g_disco`` SD-card option uses FATFS
+mounted at ``/SD:`` and sets:
 
 .. code-block:: none
 
    CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD=y
+   CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD_MOUNT_POINT="/SD:"
    CONFIG_SETTINGS_FILE=y
    CONFIG_SETTINGS_FILE_PATH="/SD:/FIDO2.SET"
    CONFIG_FS_FATFS_MOUNT_MKFS=y

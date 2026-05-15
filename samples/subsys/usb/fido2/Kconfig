@@ -8,16 +8,25 @@ source "samples/subsys/usb/common/Kconfig.sample_usbd"
 
 config FIDO2_SAMPLE_STORAGE_SD_CARD
 	bool "Use SD card for FIDO2 settings storage"
-	depends on BOARD_STM32F746G_DISCO
 	select DISK_ACCESS
 	select DISK_DRIVERS
 	select DISK_DRIVER_SDMMC
 	select FAT_FILESYSTEM_ELM
 	select FILE_SYSTEM
-	select FS_FATFS_FSTAB_AUTOMOUNT
 	select SETTINGS
 	help
 	  Store FIDO2 credential records and exported ES256 credential keys
-	  in a settings file on the STM32F746G Discovery SD card.
+	  in a settings file on an SD card. The board must provide a working
+	  SDMMC disk-access device whose FatFS drive name matches
+	  FIDO2_SAMPLE_STORAGE_SD_CARD_MOUNT_POINT.
+
+config FIDO2_SAMPLE_STORAGE_SD_CARD_MOUNT_POINT
+	string "FIDO2 SD card FATFS mount point"
+	depends on FIDO2_SAMPLE_STORAGE_SD_CARD
+	default "/SD:"
+	help
+	  FATFS mount point used for the SD card storage backend. This must
+	  match the disk-access volume name with a leading slash and trailing
+	  colon, for example "/SD:" for CONFIG_SDMMC_VOLUME_NAME="SD".
 
 source "Kconfig.zephyr"

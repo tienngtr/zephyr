@@ -13,12 +13,10 @@
 #if defined(CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD)
 #include <ff.h>
 
-#define FIDO2_SD_MOUNT_POINT "/SD:"
-
 static FATFS fido2_sd_fs;
 static struct fs_mount_t fido2_sd_mount = {
 	.type = FS_FATFS,
-	.mnt_point = FIDO2_SD_MOUNT_POINT,
+	.mnt_point = CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD_MOUNT_POINT,
 	.fs_data = &fido2_sd_fs,
 };
 #endif /* CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD */
@@ -49,11 +47,12 @@ static int fido2_mount_sd_card(void)
 	ret = fs_mount(&fido2_sd_mount);
 	if (ret) {
 		LOG_ERR("Failed to mount FIDO2 SD card storage at %s: %d",
-			FIDO2_SD_MOUNT_POINT, ret);
+			CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD_MOUNT_POINT, ret);
 		return ret;
 	}
 
-	LOG_INF("FIDO2 SD card storage mounted at %s", FIDO2_SD_MOUNT_POINT);
+	LOG_INF("FIDO2 SD card storage mounted at %s",
+		CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD_MOUNT_POINT);
 	return 0;
 }
 #endif /* CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD */
