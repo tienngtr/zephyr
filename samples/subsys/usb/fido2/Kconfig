@@ -6,4 +6,18 @@
 # tree, you cannot use them in your own application.
 source "samples/subsys/usb/common/Kconfig.sample_usbd"
 
+config FIDO2_SAMPLE_STORAGE_SD_CARD
+	bool "Use SD card for FIDO2 settings storage"
+	depends on BOARD_STM32F746G_DISCO
+	select DISK_ACCESS
+	select DISK_DRIVERS
+	select DISK_DRIVER_SDMMC
+	select FAT_FILESYSTEM_ELM
+	select FILE_SYSTEM
+	select FS_FATFS_FSTAB_AUTOMOUNT
+	select SETTINGS
+	help
+	  Store FIDO2 credential records and exported ES256 credential keys
+	  in a settings file on the STM32F746G Discovery SD card.
+
 source "Kconfig.zephyr"

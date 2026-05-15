@@ -537,6 +537,11 @@ static int mkdir_for_file(const char *file_path)
 
 	for (size_t i = 0; file_path[i] != '\0'; i++) {
 		if (i > 0 && file_path[i] == '/') {
+			if (file_path[i - 1] == ':') {
+				dir_path[i] = file_path[i];
+				continue;
+			}
+
 			dir_path[i] = '\0';
 
 			err = mkdir_if_not_exists(dir_path);

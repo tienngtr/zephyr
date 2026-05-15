@@ -30,6 +30,20 @@ boards. On ``stm32f4_disco`` storage is placed in the last two 128 KiB internal
 flash sectors. On ``stm32f746g_disco`` storage uses the board-provided QSPI NOR
 ``storage_partition``.
 
+The ``stm32f746g_disco`` can alternatively store credentials and credential
+keys in a settings file on the SD card. Insert the card before boot and build
+with the SD-card configuration fragment and overlay:
+
+.. code-block:: console
+
+   west build -p auto -b stm32f746g_disco samples/subsys/usb/fido2 -- \
+     -DEXTRA_CONF_FILE=boards/stm32f746g_disco_sd_card.conf \
+     -DEXTRA_DTC_OVERLAY_FILE=boards/stm32f746g_disco_sd_card.overlay
+
+The SD-card mode stores data in ``/SD:/FIDO2.SET``. If mounting the card fails
+because no FAT filesystem is found, the sample formats the card automatically.
+This destroys existing card contents.
+
 Building and Running
 ********************
 
@@ -154,6 +168,17 @@ qualified board targets, that enables:
    CONFIG_SETTINGS_ZMS=y
    CONFIG_SETTINGS_ZMS_FORCE_MOUNT=y
    CONFIG_SECURE_STORAGE_ITS_STORE_IMPLEMENTATION_SETTINGS=y
+
+To use a filesystem-backed settings store instead, provide a filesystem mount
+point and select the file settings backend. For example, the
+``stm32f746g_disco`` SD-card option uses FATFS mounted at ``/SD:`` and sets:
+
+.. code-block:: none
+
+   CONFIG_FIDO2_SAMPLE_STORAGE_SD_CARD=y
+   CONFIG_SETTINGS_FILE=y
+   CONFIG_SETTINGS_FILE_PATH="/SD:/FIDO2.SET"
+   CONFIG_FS_FATFS_MOUNT_MKFS=y
 
 Resident Credential Test
 ========================
